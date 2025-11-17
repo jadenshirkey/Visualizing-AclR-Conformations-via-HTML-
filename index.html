@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AclR 3D Visualization</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    background: linear-gradient(135deg, #0b0f14 0%, #1a1f2e 100%);
+    color: #e5e7eb;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    background: rgba(17, 24, 39, 0.9);
+    border-bottom: 1px solid #374151;
+    padding: 2rem;
+    text-align: center;
+  }
+  h1 {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .subtitle {
+    font-size: 1.1rem;
+    color: #9ca3af;
+  }
+  main {
+    flex: 1;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 3rem 2rem;
+    width: 100%;
+  }
+  .hero {
+    text-align: center;
+    margin-bottom: 3rem;
+  }
+  .cta-button {
+    display: inline-block;
+    background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+    color: white;
+    padding: 1rem 2.5rem;
+    font-size: 1.2rem;
+    font-weight: 600;
+    border-radius: 12px;
+    text-decoration: none;
+    transition: transform 0.2s, box-shadow 0.2s;
+    margin: 1.5rem 0;
+    box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);
+  }
+  .cta-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(59, 130, 246, 0.6);
+  }
+  .features {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+    margin: 3rem 0;
+  }
+  .feature-card {
+    background: rgba(17, 24, 39, 0.6);
+    border: 1px solid #374151;
+    border-radius: 12px;
+    padding: 1.5rem;
+    transition: transform 0.2s, border-color 0.2s;
+  }
+  .feature-card:hover {
+    transform: translateY(-4px);
+    border-color: #60a5fa;
+  }
+  .feature-card h3 {
+    color: #60a5fa;
+    font-size: 1.3rem;
+    margin-bottom: 0.75rem;
+  }
+  .feature-card p {
+    color: #d1d5db;
+    line-height: 1.6;
+  }
+  .states-list {
+    background: rgba(17, 24, 39, 0.6);
+    border: 1px solid #374151;
+    border-radius: 12px;
+    padding: 2rem;
+    margin: 2rem 0;
+  }
+  .states-list h2 {
+    color: #a78bfa;
+    margin-bottom: 1rem;
+    font-size: 1.5rem;
+  }
+  .states-list ul {
+    list-style: none;
+    padding-left: 0;
+  }
+  .states-list li {
+    padding: 0.75rem;
+    border-left: 3px solid #8b5cf6;
+    margin: 0.5rem 0;
+    padding-left: 1rem;
+    background: rgba(139, 92, 246, 0.1);
+    border-radius: 4px;
+  }
+  .states-list code {
+    background: rgba(59, 130, 246, 0.2);
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    color: #93c5fd;
+  }
+  footer {
+    background: rgba(17, 24, 39, 0.9);
+    border-top: 1px solid #374151;
+    padding: 1.5rem;
+    text-align: center;
+    color: #9ca3af;
+  }
+  .tech-stack {
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+    flex-wrap: wrap;
+    margin: 2rem 0;
+    font-size: 0.9rem;
+    color: #9ca3af;
+  }
+  .tech-stack span {
+    background: rgba(59, 130, 246, 0.15);
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    border: 1px solid #374151;
+  }
+  @media (max-width: 768px) {
+    h1 { font-size: 2rem; }
+    .features { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1>AclR Conformations Viewer</h1>
+    <p class="subtitle">Interactive 3D visualization of protein conformational states</p>
+  </header>
+
+  <main>
+    <div class="hero">
+      <p style="font-size: 1.1rem; color: #d1d5db; margin-bottom: 1rem;">
+        Explore AclR protein conformations in an interactive 3D environment.
+        Visualize structural differences between apo and ligand-bound states.
+      </p>
+      <a href="AclR_PDB_with_Centers_v8.html" class="cta-button">
+        Launch 3D Viewer
+      </a>
+    </div>
+
+    <div class="features">
+      <div class="feature-card">
+        <h3>🔬 Multiple States</h3>
+        <p>Compare four different conformational states of AclR, including apo and ligand-bound forms with active and inactive conformations.</p>
+      </div>
+      <div class="feature-card">
+        <h3>🎨 Customizable Display</h3>
+        <p>Toggle between cartoon and trace modes, show/hide sidechains, add labels, and visualize geometric centers with distance measurements.</p>
+      </div>
+      <div class="feature-card">
+        <h3>⚡ Fast & Interactive</h3>
+        <p>Built with 3Dmol.js for smooth WebGL-based rendering. Rotate, zoom, and explore structures with intuitive mouse controls.</p>
+      </div>
+      <div class="feature-card">
+        <h3>📏 Distance Analysis</h3>
+        <p>Automatic calculation and display of distances between DNA-binding and ligand-binding domains in Ångströms.</p>
+      </div>
+      <div class="feature-card">
+        <h3>💾 Self-Contained</h3>
+        <p>All PDB data embedded in a single HTML file. Works online or offline with no installation required.</p>
+      </div>
+      <div class="feature-card">
+        <h3>🌙 Dark Theme</h3>
+        <p>Modern dark interface designed for extended viewing sessions and reduced eye strain.</p>
+      </div>
+    </div>
+
+    <div class="states-list">
+      <h2>Available Conformational States</h2>
+      <ul>
+        <li><strong>APO (AA')</strong> - Apo state with AA' conformation <code>300 KB</code></li>
+        <li><strong>APO (BC)</strong> - Apo state with BC conformation <code>297 KB</code></li>
+        <li><strong>+LIG, OFF</strong> - Ligand-bound inactive state <code>335 KB</code></li>
+        <li><strong>+LIG, ON</strong> - Ligand-bound active state <code>328 KB</code></li>
+      </ul>
+    </div>
+
+    <div class="tech-stack">
+      <span>HTML5</span>
+      <span>WebGL</span>
+      <span>3Dmol.js v2.0.4</span>
+      <span>ES6 JavaScript</span>
+    </div>
+
+    <div style="text-align: center; margin: 3rem 0; padding: 2rem; background: rgba(59, 130, 246, 0.1); border-radius: 12px; border: 1px solid rgba(59, 130, 246, 0.3);">
+      <h3 style="color: #60a5fa; margin-bottom: 1rem;">Getting Started</h3>
+      <p style="color: #d1d5db; line-height: 1.6; max-width: 600px; margin: 0 auto;">
+        Click the "Launch 3D Viewer" button above to start exploring. Use your mouse to rotate (left-click + drag),
+        zoom (scroll), and pan (right-click + drag). Switch between states using the dropdown menu.
+      </p>
+    </div>
+  </main>
+
+  <footer>
+    <p>Powered by <a href="https://3dmol.csb.pitt.edu/" style="color: #60a5fa; text-decoration: none;">3Dmol.js</a></p>
+    <p style="margin-top: 0.5rem; font-size: 0.9rem;">View the <a href="README.md" style="color: #a78bfa; text-decoration: none;">documentation</a> for more details</p>
+  </footer>
+</body>
+</html>
