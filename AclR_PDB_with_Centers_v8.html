@@ -296,6 +296,8 @@
 
     function labelAt(text, p){
       if (!el('showLabels').checked) return;
+      // Add line break before [Protomer X]
+      text = text.replace(/ \[Protomer/g, '\n[Protomer');
       viewer.addLabel(text, { position: p, backgroundOpacity: 0.6, fontSize: 14 });
     }
 
@@ -310,17 +312,22 @@
       for (const p of pts) {
         const ch = chainFromLabel(p.label);
         const color = (ch === 'B') ? CHAIN_B : CHAIN_A;
-        //         const shape = viewer.addShape({color: color, opacity: 1.0});
-        //         shape.addSphere({ center: {x:p.x, y:p.y, z:p.z}, radius: 2.2, color: color, opacity: 1.0 });
+        // Add spheres when Show Centers is checked
+        if (el('showCenters').checked) {
+          const shape = viewer.addShape({color: color, opacity: 1.0});
+          shape.addSphere({ center: {x:p.x, y:p.y, z:p.z}, radius: 2.2, color: color, opacity: 1.0 });
+        }
         labelAt(p.label, {x:p.x, y:p.y, z:p.z});
         count++;
       }
-      // dashed connectors + distances
-      function get(name) { return pts.find(q => q.label === name); }
-      const lA=get('Ligand Binding Domain [Protomer 1]'), lB=get('Ligand Binding Domain [Protomer 2]');
-      const dA=get('DNA Binding Domain [Protomer 1]'), dB=get('DNA Binding Domain [Protomer 2]');
-      if (lA && lB) addDashedDistance(lA, lB);
-      if (dA && dB) addDashedDistance(dA, dB);
+      // dashed connectors + distances (only when Show Centers is checked)
+      if (el('showCenters').checked) {
+        function get(name) { return pts.find(q => q.label === name); }
+        const lA=get('Ligand Binding Domain [Protomer 1]'), lB=get('Ligand Binding Domain [Protomer 2]');
+        const dA=get('DNA Binding Domain [Protomer 1]'), dB=get('DNA Binding Domain [Protomer 2]');
+        if (lA && lB) addDashedDistance(lA, lB);
+        if (dA && dB) addDashedDistance(dA, dB);
+      }
       return count;
     }
 
@@ -350,15 +357,14 @@
           viewer.addLabel("No PDB embedded for " + state, { fontSize: 16, backgroundOpacity: 0.6 });
         }
       }
-      if (el('showCenters').checked) {
-        centersCount = addCenters();
-      }
+      // Always call addCenters to allow labels to be shown independently
+      centersCount = addCenters();
       viewer.zoomTo();
       viewer.render();
       status.textContent = "State: " + state +
         " · Mode: " + (el('fastMode').checked ? "Fast (trace)" : "Cartoon") +
         " · Sidechains: " + (el('showSidechains').checked ? "ON" : "OFF") +
-        " · Centers: " + centersCount + (centersCount ? " shown" : " (none found)");
+        " · Centers: " + (el('showCenters').checked ? centersCount + " shown" : centersCount + " (hidden)");
       if (el('spin').checked) startSpin();
     }
 
