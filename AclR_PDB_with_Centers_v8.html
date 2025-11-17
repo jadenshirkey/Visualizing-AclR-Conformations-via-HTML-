@@ -60,7 +60,7 @@
     const RED     = 0xFF0000; // Ser57
     const DASH_GRAY = 0x9ca3af;
 
-    let state = "APO_AA'";
+    let state = "LIGAND_OFF";
     const el = (id)=>document.getElementById(id);
     const viewer = $3Dmol.createViewer('viewer', {
       backgroundColor: 'black',
@@ -249,6 +249,8 @@
     }
 
     draw();
+    viewer.rotate(180, {x:1, y:0, z:0});
+    viewer.render();
   }
 })();
 </script>
