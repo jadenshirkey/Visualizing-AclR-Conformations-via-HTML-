@@ -170,15 +170,12 @@
 
     function showSidechains(model){
       // Explicit residues: Tyr44 (yellow), Ser57 (red), Phe62 (lime)
-      // Include sidechain atoms AND C-alpha to connect to the ribbon
-      model.setStyle({resi: 44}, {stick: { radius: 0.28, color: YELLOW }});  // Tyr44
-      model.addStyle({resi: 44, atom: 'CA'}, {stick: { radius: 0.28, color: YELLOW }});  // Tyr44 C-alpha
+      // Use addStyle to preserve the ribbon while adding stick representation
+      model.addStyle({resi: 44}, {stick: { radius: 0.28, color: YELLOW }});  // Tyr44 sidechain + CA
 
-      model.setStyle({resi: 57}, {stick: { radius: 0.28, color: RED }});     // Ser57
-      model.addStyle({resi: 57, atom: 'CA'}, {stick: { radius: 0.28, color: RED }});     // Ser57 C-alpha
+      model.addStyle({resi: 57}, {stick: { radius: 0.28, color: RED }});     // Ser57 sidechain + CA
 
-      model.setStyle({resi: 62}, {stick: { radius: 0.28, color: LIME }});    // Phe62
-      model.addStyle({resi: 62, atom: 'CA'}, {stick: { radius: 0.28, color: LIME }});    // Phe62 C-alpha
+      model.addStyle({resi: 62}, {stick: { radius: 0.28, color: LIME }});    // Phe62 sidechain + CA
 
       // model.setStyle({chain:'A', resi: [58,59,60,61]}, {stick: { radius: 0.24, color: CHAIN_A }});
       // model.setStyle({chain:'B', resi: [58,59,60,61]}, {stick: { radius: 0.24, color: CHAIN_B }});
