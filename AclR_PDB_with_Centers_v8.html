@@ -170,21 +170,13 @@
 
     function showSidechains(model){
       // Explicit residues: Tyr44 (yellow), Ser57 (red), Phe62 (lime)
-      // Only style sidechain atoms + CA to preserve the cartoon ribbon
-      // Exclude backbone N, C, O atoms which are used by the cartoon
-      const sidechainAtoms = ['CA', 'CB', 'CG', 'CG1', 'CG2', 'CD', 'CD1', 'CD2',
-                              'CE', 'CE1', 'CE2', 'CZ', 'OH', 'OG', 'OG1',
-                              'OD1', 'OD2', 'OE1', 'OE2', 'ND1', 'ND2',
-                              'NE', 'NE1', 'NE2', 'NZ', 'SG', 'SD'];
-
-      model.addStyle({resi: 44, atom: sidechainAtoms}, {stick: { radius: 0.28, color: YELLOW }});  // Tyr44
-      model.addStyle({resi: 57, atom: sidechainAtoms}, {stick: { radius: 0.28, color: RED }});     // Ser57
-      model.addStyle({resi: 62, atom: sidechainAtoms}, {stick: { radius: 0.28, color: LIME }});    // Phe62
-
+      model.setStyle({resi: 44}, {stick: { radius: 0.28, color: YELLOW }});  // Tyr44
+      model.setStyle({resi: 57}, {stick: { radius: 0.28, color: RED }});     // Ser57
+      model.setStyle({resi: 62}, {stick: { radius: 0.28, color: LIME }});    // Phe62
       // model.setStyle({chain:'A', resi: [58,59,60,61]}, {stick: { radius: 0.24, color: CHAIN_A }});
       // model.setStyle({chain:'B', resi: [58,59,60,61]}, {stick: { radius: 0.24, color: CHAIN_B }});
       // Ligand-coordinating residues within 4 Å (entire residue)
-      // model.setStyle({byres:true, within: {distance: 4.0, sel: {resn:'LIG'}}},
+      // model.setStyle({byres:true, within: {distance: 4.0, sel: {resn:'LIG'}}}, 
 //                      {stick: { radius: 0.20, opacity: 1.0 }});
     }
 
@@ -258,7 +250,6 @@
 
     draw();
     viewer.rotate(180, {x:1, y:0, z:0});
-    viewer.zoomTo();
     viewer.render();
   }
 })();
