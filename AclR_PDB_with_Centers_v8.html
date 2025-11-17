@@ -13,7 +13,7 @@
   label { display:inline-flex; align-items:center; gap:6px; }
   #viewer { position:relative; height: calc(100vh - 52px); }
   .status { position:absolute; left:10px; top:10px; font-size:12px; background:rgba(17,24,39,.85); border:1px solid #374151; border-radius:8px; padding:6px 8px; }
-  .legend { position:absolute; right:10px; top:10px; font-size:12px; background:rgba(17,24,39,.85); border:1px solid #374151; border-radius:8px; padding:6px 8px; }
+  .legend { position:absolute; left:75%; top:50%; transform:translate(-50%, -50%); font-size:18px; background:rgba(17,24,39,.92); border:1px solid #374151; border-radius:12px; padding:20px 24px; cursor:move; min-width:300px; user-select:none; }
 </style>
 <script src="3Dmol-min.js"></script>
 </head>
@@ -73,16 +73,58 @@
     const legend = document.createElement('div');
     legend.className = 'legend';
     legend.innerHTML = `
-      <div><b>Colors</b></div>
-      <div><span style="display:inline-block;width:10px;height:10px;background:#800000;margin-right:6px;"></span>Chain A (also centers)</div>
-      <div><span style="display:inline-block;width:10px;height:10px;background:#ffffff;margin-right:6px;border:1px solid #ccc;box-sizing:border-box;"></span>Chain B (also centers)</div>
-      <div><b>Highlights</b></div>
+      <div><b>PROTOMERS:</b></div>
+      <div><span style="display:inline-block;width:10px;height:10px;background:#800000;margin-right:6px;"></span>Chain A</div>
+      <div><span style="display:inline-block;width:10px;height:10px;background:#ffffff;margin-right:6px;border:1px solid #ccc;box-sizing:border-box;"></span>Chain B</div>
+      <div><b>RESIDUES:</b></div>
       <div><span style="display:inline-block;width:10px;height:10px;background:#ffd700;margin-right:6px;"></span>Tyr44</div>
-      <div><span style="display:inline-block;width:10px;height:10px;background:#32cd32;margin-right:6px;"></span>Ser57, Phe62</div>
+      <div><span style="display:inline-block;width:10px;height:10px;background:#ff0000;margin-right:6px;"></span>Ser57</div>
+      <div><span style="display:inline-block;width:10px;height:10px;background:#32cd32;margin-right:6px;"></span>Phe62</div>
       <div style="margin-top:6px;opacity:.75;">Ligand: ball-and-stick (CPK)</div>`;
     document.getElementById('viewer').appendChild(status);
-    document.getElementById('viewer').appendChild(legend);
 
+    // Make legend draggable
+    let isDragging = false;
+    let currentX;
+    let currentY;
+    let initialX;
+    let initialY;
+    let xOffset = 0;
+    let yOffset = 0;
+
+    legend.addEventListener('mousedown', dragStart);
+    document.addEventListener('mousemove', drag);
+    document.addEventListener('mouseup', dragEnd);
+
+    function dragStart(e) {
+      initialX = e.clientX - xOffset;
+      initialY = e.clientY - yOffset;
+      if (e.target === legend || legend.contains(e.target)) {
+        isDragging = true;
+      }
+    }
+
+    function drag(e) {
+      if (isDragging) {
+        e.preventDefault();
+        currentX = e.clientX - initialX;
+        currentY = e.clientY - initialY;
+        xOffset = currentX;
+        yOffset = currentY;
+        setTranslate(currentX, currentY, legend);
+      }
+    }
+
+    function dragEnd(e) {
+      initialX = currentX;
+      initialY = currentY;
+      isDragging = false;
+    }
+
+    function setTranslate(xPos, yPos, el) {
+      el.style.transform = 'translate(' + xPos + 'px, ' + yPos + 'px)';
+    }
+    document.getElementById('viewer').appendChild(legend);
     // Slow spin
     let spinRAF = null;
     function startSpin(){
