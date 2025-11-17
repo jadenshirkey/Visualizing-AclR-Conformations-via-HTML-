@@ -13,7 +13,34 @@
   label { display:inline-flex; align-items:center; gap:6px; }
   #viewer { position:relative; height: calc(100vh - 52px); }
   .status { position:absolute; left:10px; top:10px; font-size:12px; background:rgba(17,24,39,.85); border:1px solid #374151; border-radius:8px; padding:6px 8px; }
-  .legend { position:absolute; left:87.5%; top:50%; transform:translate(-50%, -50%); font-size:18px; background:rgba(17,24,39,.92); border:1px solid #374151; border-radius:12px; padding:20px 24px; cursor:move; min-width:300px; user-select:none; }
+  .legend { position:absolute; left:87.5%; top:50%; transform:translate(-50%, -50%); font-size:18px; background:rgba(17,24,39,.92); border:1px solid #374151; border-radius:12px; padding:20px 24px; cursor:move; min-width:300px; user-select:none; z-index:100; transition:opacity 0.3s ease, visibility 0.3s ease; }
+  .legend.hidden { opacity:0; visibility:hidden; pointer-events:none; }
+  .legend-toggle { position:absolute; left:87.5%; top:10px; transform:translateX(-50%); background:#111827; color:#e5e7eb; border:1px solid #374151; border-radius:8px; padding:8px 16px; font-size:14px; font-weight:500; cursor:pointer; user-select:none; transition:all 0.2s ease; z-index:1000; display:flex; align-items:center; gap:6px; box-shadow:0 2px 8px rgba(0,0,0,0.3); }
+  .legend-toggle:hover { background:#1f2937; border-color:#4b5563; transform:translateX(-50%) translateY(-2px); box-shadow:0 4px 12px rgba(0,0,0,0.4); }
+  .legend-toggle:active { transform:translateX(-50%) translateY(0); box-shadow:0 2px 6px rgba(0,0,0,0.3); }
+  .legend-toggle::before { content:'▼'; font-size:10px; transition:transform 0.3s ease; }
+  .legend-toggle.collapsed::before { transform:rotate(-90deg); }
+  .legend-toggle:focus { outline:2px solid #60a5fa; outline-offset:2px; }
+  .legend-toggle:focus:not(:focus-visible) { outline:none; }
+  @media (max-width:767px) {
+    .legend { left:50%; top:auto; bottom:10px; transform:translate(-50%, 0); font-size:16px; padding:16px 20px; min-width:280px; max-width:calc(100vw - 20px); max-height:40vh; overflow-y:auto; }
+    .legend > div { margin:4px 0; }
+    .legend::-webkit-scrollbar { width:6px; }
+    .legend::-webkit-scrollbar-track { background:rgba(55,65,81,0.3); border-radius:3px; }
+    .legend::-webkit-scrollbar-thumb { background:rgba(96,165,250,0.5); border-radius:3px; }
+    .legend::-webkit-scrollbar-thumb:hover { background:rgba(96,165,250,0.7); }
+    .legend-toggle { left:auto; right:10px; top:10px; transform:none; font-size:12px; padding:6px 12px; }
+    .legend-toggle:hover { transform:translateY(-2px); }
+    .legend-toggle:active { transform:translateY(0); }
+  }
+  @media (max-width:479px) {
+    .legend { left:10px; right:10px; width:auto; min-width:unset; transform:none; font-size:14px; padding:12px 16px; max-height:35vh; line-height:1.4; }
+    .legend b { font-size:15px; }
+    .legend span[style*="width:10px"] { width:8px !important; height:8px !important; }
+  }
+  @media (max-width:767px) and (orientation:landscape) {
+    .legend { max-height:50vh; font-size:14px; padding:12px 16px; }
+  }
 </style>
 <script src="3Dmol-min.js"></script>
 </head>
@@ -83,7 +110,7 @@
       <div style="margin-top:6px;opacity:.75;">Ligand: ball-and-stick (CPK)</div>`;
     document.getElementById('viewer').appendChild(status);
 
-    // Make legend draggable
+    // Make legend draggable with responsive support
     let isDragging = false;
     let currentX;
     let currentY;
@@ -92,13 +119,42 @@
     let xOffset = 0;
     let yOffset = 0;
 
+    function isMobileView() {
+      return window.innerWidth < 768;
+    }
+
+    function resetLegendPosition() {
+      xOffset = 0;
+      yOffset = 0;
+      legend.style.transform = '';
+      if (!isMobileView()) {
+        legend.style.transform = 'translate(-50%, -50%)';
+      } else if (window.innerWidth >= 480) {
+        legend.style.transform = 'translate(-50%, 0)';
+      } else {
+        legend.style.transform = 'none';
+      }
+    }
+
+    let resizeTimeout;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(() => {
+        resetLegendPosition();
+      }, 250);
+    });
+
     legend.addEventListener('mousedown', dragStart);
     document.addEventListener('mousemove', drag);
     document.addEventListener('mouseup', dragEnd);
+    legend.addEventListener('touchstart', dragStart, { passive: false });
+    document.addEventListener('touchmove', drag, { passive: false });
+    document.addEventListener('touchend', dragEnd);
 
     function dragStart(e) {
-      initialX = e.clientX - xOffset;
-      initialY = e.clientY - yOffset;
+      const event = e.type === 'touchstart' ? e.touches[0] : e;
+      initialX = event.clientX - xOffset;
+      initialY = event.clientY - yOffset;
       if (e.target === legend || legend.contains(e.target)) {
         isDragging = true;
       }
@@ -107,8 +163,16 @@
     function drag(e) {
       if (isDragging) {
         e.preventDefault();
-        currentX = e.clientX - initialX;
-        currentY = e.clientY - initialY;
+        const event = e.type === 'touchmove' ? e.touches[0] : e;
+        currentX = event.clientX - initialX;
+        currentY = event.clientY - initialY;
+        const viewerRect = document.getElementById('viewer').getBoundingClientRect();
+        const legendRect = legend.getBoundingClientRect();
+        const maxX = viewerRect.width - legendRect.width;
+        const maxY = viewerRect.height - legendRect.height;
+        const padding = 10;
+        currentX = Math.max(-legendRect.left + padding, Math.min(currentX, maxX - legendRect.left - padding));
+        currentY = Math.max(-legendRect.top + viewerRect.top + padding, Math.min(currentY, maxY - legendRect.top + viewerRect.top - padding));
         xOffset = currentX;
         yOffset = currentY;
         setTranslate(currentX, currentY, legend);
@@ -125,6 +189,56 @@
       el.style.transform = 'translate(' + xPos + 'px, ' + yPos + 'px)';
     }
     document.getElementById('viewer').appendChild(legend);
+
+    // Legend Toggle Functionality
+    (function initLegendToggle() {
+      const toggleBtn = document.createElement('button');
+      toggleBtn.className = 'legend-toggle';
+      toggleBtn.setAttribute('aria-label', 'Toggle legend visibility');
+      toggleBtn.setAttribute('aria-expanded', 'true');
+
+      const updateButtonText = (isVisible) => {
+        toggleBtn.textContent = isVisible ? 'Hide Legend' : 'Show Legend';
+      };
+
+      const savedState = localStorage.getItem('legendVisible');
+      const isInitiallyVisible = savedState !== 'false';
+
+      updateButtonText(isInitiallyVisible);
+
+      if (!isInitiallyVisible) {
+        legend.classList.add('hidden');
+        toggleBtn.classList.add('collapsed');
+        toggleBtn.setAttribute('aria-expanded', 'false');
+      }
+
+      const toggleLegend = () => {
+        const isVisible = !legend.classList.contains('hidden');
+        if (isVisible) {
+          legend.classList.add('hidden');
+          toggleBtn.classList.add('collapsed');
+          toggleBtn.setAttribute('aria-expanded', 'false');
+          localStorage.setItem('legendVisible', 'false');
+          updateButtonText(false);
+        } else {
+          legend.classList.remove('hidden');
+          toggleBtn.classList.remove('collapsed');
+          toggleBtn.setAttribute('aria-expanded', 'true');
+          localStorage.setItem('legendVisible', 'true');
+          updateButtonText(true);
+        }
+      };
+
+      toggleBtn.addEventListener('click', toggleLegend);
+      toggleBtn.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          toggleLegend();
+        }
+      });
+
+      document.getElementById('viewer').appendChild(toggleBtn);
+    })();
     // Slow spin
     let spinRAF = null;
     function startSpin(){
