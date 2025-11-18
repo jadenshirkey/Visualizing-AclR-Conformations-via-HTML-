@@ -266,7 +266,62 @@
     el('showSidechains').onchange = draw;
     el('showLabels').onchange = draw;
     el('spin').onchange = ()=> { if (el('spin').checked) startSpin(); else stopSpin(); };
-    el('reset').onclick = ()=> { viewer.zoomTo(); viewer.render(); };
+    el('reset').onclick = ()=> { viewer.zoomTo(); viewer.render(); if (isMobileView()) applyMobileViewAdjustments(); };
+
+    // Two-finger touch pan/drag functionality for the 3D viewer
+    (function initTwoFingerPan() {
+      const viewerElement = document.getElementById('viewer');
+      let lastTouchCenter = null;
+      let isTwoFingerPan = false;
+
+      function getTouchCenter(touch1, touch2) {
+        return {
+          x: (touch1.clientX + touch2.clientX) / 2,
+          y: (touch1.clientY + touch2.clientY) / 2
+        };
+      }
+
+      viewerElement.addEventListener('touchstart', function(e) {
+        if (e.touches.length === 2) {
+          // Two fingers detected - start panning mode
+          isTwoFingerPan = true;
+          lastTouchCenter = getTouchCenter(e.touches[0], e.touches[1]);
+          e.preventDefault();
+        }
+      }, { passive: false });
+
+      viewerElement.addEventListener('touchmove', function(e) {
+        if (e.touches.length === 2 && isTwoFingerPan) {
+          e.preventDefault();
+
+          const currentCenter = getTouchCenter(e.touches[0], e.touches[1]);
+
+          // Calculate translation delta
+          const deltaX = currentCenter.x - lastTouchCenter.x;
+          const deltaY = currentCenter.y - lastTouchCenter.y;
+
+          // Apply translation to the viewer (only if movement is significant)
+          if (Math.abs(deltaX) > 1 || Math.abs(deltaY) > 1) {
+            viewer.translate(deltaX, deltaY);
+            viewer.render();
+          }
+
+          lastTouchCenter = currentCenter;
+        }
+      }, { passive: false });
+
+      viewerElement.addEventListener('touchend', function(e) {
+        if (e.touches.length < 2) {
+          isTwoFingerPan = false;
+          lastTouchCenter = null;
+        }
+      });
+
+      viewerElement.addEventListener('touchcancel', function(e) {
+        isTwoFingerPan = false;
+        lastTouchCenter = null;
+      });
+    })();
 
     function showProtein(model){
       if (el('fastMode').checked) {
@@ -343,6 +398,18 @@
       labelAt(dist.toFixed(1) + " Å", mid);
     }
 
+
+    // Apply mobile-specific view adjustments
+    function applyMobileViewAdjustments() {
+      if (isMobileView()) {
+        // Translate model upward to position it at top-center
+        // Negative Y value moves the model up in screen coordinates
+        viewer.translate(0, -120);
+        // Zoom out by 2x (factor of 0.5)
+        viewer.zoom(0.5);
+        viewer.render();
+      }
+    }
     function draw(){
       stopSpin();
       viewer.clear();
@@ -371,6 +438,7 @@
     draw();
     viewer.rotate(180, {x:1, y:0, z:0});
     viewer.render();
+    applyMobileViewAdjustments();
   }
 })();
 </script>
