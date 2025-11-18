@@ -381,9 +381,9 @@
     function showSidechains(model){
       // Explicit residues: Tyr44 (yellow), Ser57 (red), Phe62 (lime)
       // Use addStyle so we KEEP the underlying cartoon/trace.
-      model.addStyle({ resi: 44 }, { stick: { radius: 0.55, color: YELLOW } }); // Tyr44
-      model.addStyle({ resi: 57 }, { stick: { radius: 0.55, color: RED } });    // Ser57
-      model.addStyle({ resi: 62 }, { stick: { radius: 0.55, color: LIME } });   // Phe62
+      model.addStyle({ chain: 'A', resi: 44 }, { stick: { radius: 0.55, color: YELLOW } }); // Tyr44
+      model.addStyle({ chain: 'A', resi: 57 }, { stick: { radius: 0.55, color: RED } });    // Ser57
+      model.addStyle({ chain: 'A', resi: 62 }, { stick: { radius: 0.55, color: LIME } });   // Phe62
       // Optional: if you re-enable these blocks, use addStyle as well:
       // model.addStyle({chain:'A', resi: [58,59,60,61]}, {stick: { radius: 0.24, color: CHAIN_A }});
       // model.addStyle({chain:'B', resi: [58,59,60,61]}, {stick: { radius: 0.24, color: CHAIN_B }});
@@ -497,12 +497,12 @@
           const m = viewer.addModel(pdb, "pdb");
           showProtein(m);
           if (el('showSidechains').checked) {
-          try {
-            showSidechains(m);
-          } catch (e) {
-            console.error("showSidechains error:", e);
+            try {
+              showSidechains(m);
+            } catch (e) {
+              console.error("showSidechains error:", e);
+            }
           }
-        }
         } else {
           viewer.addLabel("No PDB embedded for " + state, { fontSize: 16, backgroundOpacity: 0.6 });
         }
