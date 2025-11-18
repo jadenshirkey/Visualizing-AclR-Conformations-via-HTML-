@@ -12,6 +12,7 @@
   select, button { background:#111827; color:#e5e7eb; border:1px solid #374151; border-radius:8px; padding:6px 8px; }
   button:hover { background:#1f2937; border-color:#4b5563; }
   button:active { background:#0f172a; transform:translateY(1px); }
+  button.button-active { background:#60a5fa; border-color:#3b82f6; transform:scale(0.95); }
   label { display:inline-flex; align-items:center; gap:6px; }
   #viewer { position:relative; height: calc(100vh - 52px); }
   .status { position:absolute; left:10px; top:10px; font-size:12px; background:rgba(17,24,39,.85); border:1px solid #374151; border-radius:8px; padding:6px 8px; }
@@ -271,8 +272,14 @@
     el('spin').onchange = ()=> { if (el('spin').checked) startSpin(); else stopSpin(); };
     el('reset').onclick = ()=> {
       stopSpin();
-      viewer.setView([0, 0, 0]); // Reset rotation to default
+      // Add visual feedback
+      el('reset').classList.add('button-active');
+      setTimeout(() => el('reset').classList.remove('button-active'), 200);
+
+      // Completely reset view to initial state
+      viewer.setView([0, 0, 0]);
       viewer.zoomTo();
+      viewer.rotate(180, {x:1, y:0, z:0}); // Restore initial rotation
       viewer.render();
       if (isMobileView()) applyMobileViewAdjustments();
     };
@@ -360,19 +367,36 @@
 
     function labelAt(text, p){
       if (!el('showLabels').checked) return;
-      // Add line break before [Protomer X]
-      text = text.replace(/ \[Protomer/g, '\n[Protomer');
-      viewer.addLabel(text, { position: p, backgroundOpacity: 0.6, fontSize: 14 });
+      // Split labels with [Protomer X] into two lines
+      const protomerMatch = text.match(/^(.+?)\s+(\[Protomer \d+\])$/);
+      if (protomerMatch) {
+        // First line: domain name (slightly above)
+        viewer.addLabel(protomerMatch[1], {
+          position: {x: p.x, y: p.y + 0.8, z: p.z},
+          backgroundOpacity: 0.6,
+          fontSize: 14
+        });
+        // Second line: [Protomer X] (slightly below)
+        viewer.addLabel(protomerMatch[2], {
+          position: {x: p.x, y: p.y - 0.8, z: p.z},
+          backgroundOpacity: 0.6,
+          fontSize: 14
+        });
+      } else {
+        // Single line label
+        viewer.addLabel(text, { position: p, backgroundOpacity: 0.6, fontSize: 14 });
+      }
     }
 
     function distanceLabelAt(text, p){
-      // Distance labels require BOTH showCenters AND showLabels to be ON
-      if (!el('showCenters').checked || !el('showLabels').checked) return;
+      // Distance labels should show when showCenters is ON
+      if (!el('showCenters').checked) return;
       viewer.addLabel(text, { position: p, backgroundOpacity: 0.6, fontSize: 14 });
     }
 
     function chainFromLabel(lbl){
-      return (lbl && lbl.endsWith('_B')) ? 'B' : 'A';
+      // Check if label contains "Protomer 2" to identify chain B
+      return (lbl && lbl.includes('Protomer 2')) ? 'B' : 'A';
     }
 
     function addCenters(){
