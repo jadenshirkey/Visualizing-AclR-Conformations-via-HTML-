@@ -271,18 +271,15 @@
     el('showLabels').onchange = draw;
     el('spin').onchange = ()=> { if (el('spin').checked) startSpin(); else stopSpin(); };
     el('reset').onclick = ()=> {
-      stopSpin();
-      // Add visual feedback
-      el('reset').classList.add('button-active');
-      setTimeout(() => el('reset').classList.remove('button-active'), 200);
-
-      // Completely reset view to initial state
-      viewer.setView([0, 0, 0]);
-      viewer.zoomTo();
-      viewer.rotate(180, {x:1, y:0, z:0}); // Restore initial rotation
-      viewer.render();
-      if (isMobileView()) applyMobileViewAdjustments();
-    };
+  // Blue flash feedback
+  el('reset').classList.add('button-active');
+  setTimeout(() => el('reset').classList.remove('button-active'), 200);
+  // Rebuild the current model with its default initial view
+  draw();
+  viewer.rotate(180, {x:1, y:0, z:0});
+  viewer.render();
+  applyMobileViewAdjustments();
+};
 
     // Two-finger touch pan/drag functionality for the 3D viewer
     (function initTwoFingerPan() {
@@ -318,7 +315,7 @@
 
           // Apply translation to the viewer (only if movement is significant)
           if (Math.abs(deltaX) > 1 || Math.abs(deltaY) > 1) {
-            viewer.translate(deltaX, deltaY);
+            viewer.translate(deltaX, -deltaY);
             viewer.render();
           }
 
@@ -339,6 +336,19 @@
       });
     })();
 
+// Invert desktop mouse/trackpad wheel zoom direction (capture-phase to override 3Dmol default)
+(function initWheelZoomInvert() {
+  const viewerElement = document.getElementById('viewer');
+  viewerElement.addEventListener('wheel', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    // deltaY > 0 typically indicates wheel scrolled down
+    const factor = (e.deltaY > 0) ? 0.9 : 1.1; // <1 zooms out, >1 zooms in
+    viewer.zoom(factor);
+    viewer.render();
+  }, { passive: false, capture: true });
+})();
+
     function showProtein(model){
       if (el('fastMode').checked) {
         model.setStyle({chain:'A'}, {line: { color: CHAIN_A, linewidth: 2 }});
@@ -355,9 +365,9 @@
 
     function showSidechains(model){
       // Explicit residues: Tyr44 (yellow), Ser57 (red), Phe62 (lime)
-      model.setStyle({resi: 44}, {stick: { radius: 0.28, color: YELLOW }});  // Tyr44
-      model.setStyle({resi: 57}, {stick: { radius: 0.28, color: RED }});     // Ser57
-      model.setStyle({resi: 62}, {stick: { radius: 0.28, color: LIME }});    // Phe62
+      model.addStyle({resi: 44}, {stick: { radius: 0.28, color: YELLOW }});  // Tyr44
+      model.addStyle({resi: 57}, {stick: { radius: 0.28, color: RED }});     // Ser57
+      model.addStyle({resi: 62}, {stick: { radius: 0.28, color: LIME }});    // Phe62
       // model.setStyle({chain:'A', resi: [58,59,60,61]}, {stick: { radius: 0.24, color: CHAIN_A }});
       // model.setStyle({chain:'B', resi: [58,59,60,61]}, {stick: { radius: 0.24, color: CHAIN_B }});
       // Ligand-coordinating residues within 4 Å (entire residue)
@@ -372,13 +382,13 @@
       if (protomerMatch) {
         // First line: domain name (slightly above)
         viewer.addLabel(protomerMatch[1], {
-          position: {x: p.x, y: p.y + 0.8, z: p.z},
+          position: {x: p.x, y: p.y + 2.4, z: p.z},
           backgroundOpacity: 0.6,
           fontSize: 14
         });
         // Second line: [Protomer X] (slightly below)
         viewer.addLabel(protomerMatch[2], {
-          position: {x: p.x, y: p.y - 0.8, z: p.z},
+          position: {x: p.x, y: p.y - 2.4, z: p.z},
           backgroundOpacity: 0.6,
           fontSize: 14
         });
@@ -441,15 +451,17 @@
 
     // Apply mobile-specific view adjustments
     function applyMobileViewAdjustments() {
-      if (isMobileView()) {
-        // Translate model upward to position it at top-center
-        // Negative Y value moves the model up in screen coordinates
-        viewer.translate(0, -120);
-        // Zoom out by 2x (factor of 0.5)
-        viewer.zoom(0.5);
-        viewer.render();
-      }
-    }
+  if (isMobileView()) {
+    const viewerElement = document.getElementById('viewer');
+    const h = viewerElement ? viewerElement.clientHeight : window.innerHeight;
+    // Move the model upward to roughly the top third of the viewport
+    const offsetY = Math.round(h * 0.28);
+    viewer.translate(0, -offsetY);
+    // Slight zoom-out to compensate for smaller screens
+    viewer.zoom(0.5);
+    viewer.render();
+  }
+}
     function draw(){
       stopSpin();
       viewer.clear();
