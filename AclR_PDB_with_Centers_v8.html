@@ -378,18 +378,33 @@
       model.setStyle({resn:'LIG'}, {stick: { radius: 0.25 }, sphere: { radius: 0.55 }});
     }
 
-    function showSidechains(model){
-      // Explicit residues: Tyr44 (yellow), Ser57 (red), Phe62 (lime)
-      // Use addStyle so we KEEP the underlying cartoon/trace.
-      model.addStyle({ resi: 44 }, { stick: { radius: 0.28, color: YELLOW } }); // Tyr44
-      model.addStyle({ resi: 57 }, { stick: { radius: 0.28, color: RED } });    // Ser57
-      model.addStyle({ resi: 62 }, { stick: { radius: 0.28, color: LIME } });   // Phe62
-      // Optional: if you re-enable these blocks, use addStyle as well:
-      // model.addStyle({chain:'A', resi: [58,59,60,61]}, {stick: { radius: 0.24, color: CHAIN_A }});
-      // model.addStyle({chain:'B', resi: [58,59,60,61]}, {stick: { radius: 0.24, color: CHAIN_B }});
-      // model.addStyle({byres:true, within: {distance: 4.0, sel: {resn:'LIG'}}},
-      //                {stick: { radius: 0.20, opacity: 1.0 }});
-    }
+function showSidechains(model){
+  // Highlight Tyr44, Ser57, Phe62 on both protomers.
+  // We re-define style for those residues to include both cartoon and stick,
+  // so the ribbon stays continuous and sticks are clearly visible.
+
+  const targets = [
+    { chain: 'A', resi: 44, color: YELLOW },
+    { chain: 'B', resi: 44, color: YELLOW },
+    { chain: 'A', resi: 57, color: RED },
+    { chain: 'B', resi: 57, color: RED },
+    { chain: 'A', resi: 62, color: LIME },
+    { chain: 'B', resi: 62, color: LIME },
+  ];
+
+  targets.forEach(t => {
+    const cartoonColor = (t.chain === 'B') ? CHAIN_B : CHAIN_A;
+
+    model.setStyle(
+      { chain: t.chain, resi: t.resi },
+      {
+        cartoon: { color: cartoonColor, opacity: 0.98 },
+        stick:   { radius: 0.45, color: t.color }
+      }
+    );
+  });
+}
+
 
     function labelAt(text, p){
       if (!el('showLabels').checked) return;
