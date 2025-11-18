@@ -202,7 +202,8 @@
       };
 
       const savedState = localStorage.getItem('legendVisible');
-      const isInitiallyVisible = savedState !== 'false';
+      // Default: open on desktop, closed on mobile (unless user has saved a preference)
+      const isInitiallyVisible = savedState !== null ? savedState !== 'false' : !isMobileView();
 
       updateButtonText(isInitiallyVisible);
 
