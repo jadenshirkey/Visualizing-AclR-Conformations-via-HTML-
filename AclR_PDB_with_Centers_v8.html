@@ -270,16 +270,25 @@
     el('showSidechains').onchange = draw;
     el('showLabels').onchange = draw;
     el('spin').onchange = ()=> { if (el('spin').checked) startSpin(); else stopSpin(); };
-    el('reset').onclick = ()=> {
-  // Blue flash feedback
-  el('reset').classList.add('button-active');
-  setTimeout(() => el('reset').classList.remove('button-active'), 200);
-  // Rebuild the current model with its default initial view
-  draw();
-  viewer.rotate(180, {x:1, y:0, z:0});
-  viewer.render();
-  applyMobileViewAdjustments();
-};
+    el('reset').onclick = () => {
+      const btn = el('reset');
+
+      // Visual feedback (blue flash)
+      btn.classList.add('button-active');
+      setTimeout(() => btn.classList.remove('button-active'), 200);
+
+      // Re-draw the CURRENTLY selected state/model with current toggles
+      draw();
+
+      // Apply the same orientation used at initial load
+      viewer.rotate(180, { x: 1, y: 0, z: 0 });
+      viewer.render();
+
+      // Mobile-specific translation + zoom
+      if (isMobileView()) {
+        applyMobileViewAdjustments();
+      }
+    };
 
     // Two-finger touch pan/drag functionality for the 3D viewer
     (function initTwoFingerPan() {
@@ -314,6 +323,7 @@
           const deltaY = currentCenter.y - lastTouchCenter.y;
 
           // Apply translation to the viewer (only if movement is significant)
+          // NOTE: invert Y so dragging fingers down moves the model down on screen
           if (Math.abs(deltaX) > 1 || Math.abs(deltaY) > 1) {
             viewer.translate(deltaX, -deltaY);
             viewer.render();
@@ -336,18 +346,25 @@
       });
     })();
 
-// Invert desktop mouse/trackpad wheel zoom direction (capture-phase to override 3Dmol default)
-(function initWheelZoomInvert() {
-  const viewerElement = document.getElementById('viewer');
-  viewerElement.addEventListener('wheel', function(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    // deltaY > 0 typically indicates wheel scrolled down
-    const factor = (e.deltaY > 0) ? 0.9 : 1.1; // <1 zooms out, >1 zooms in
-    viewer.zoom(factor);
-    viewer.render();
-  }, { passive: false, capture: true });
-})();
+    // Invert mouse wheel zoom: scroll away (down) -> zoom out, scroll toward (up) -> zoom in
+    (function initWheelZoomInvert() {
+      const viewerElement = document.getElementById('viewer');
+      if (!viewerElement) return;
+
+      viewerElement.addEventListener('wheel', function(e) {
+        // Block 3Dmol's default wheel handling
+        e.preventDefault();
+        e.stopImmediatePropagation();
+
+        const dy = e.deltaY || 0;
+        // dy > 0 (scroll down/away): zoom OUT (factor < 1)
+        // dy < 0 (scroll up/toward): zoom IN (factor > 1)
+        const factor = dy > 0 ? 0.9 : 1.1;
+
+        viewer.zoom(factor);
+        viewer.render();
+      }, { passive: false, capture: true });
+    })();
 
     function showProtein(model){
       if (el('fastMode').checked) {
@@ -365,36 +382,44 @@
 
     function showSidechains(model){
       // Explicit residues: Tyr44 (yellow), Ser57 (red), Phe62 (lime)
-      model.addStyle({resi: 44}, {stick: { radius: 0.28, color: YELLOW }});  // Tyr44
-      model.addStyle({resi: 57}, {stick: { radius: 0.28, color: RED }});     // Ser57
-      model.addStyle({resi: 62}, {stick: { radius: 0.28, color: LIME }});    // Phe62
-      // model.setStyle({chain:'A', resi: [58,59,60,61]}, {stick: { radius: 0.24, color: CHAIN_A }});
-      // model.setStyle({chain:'B', resi: [58,59,60,61]}, {stick: { radius: 0.24, color: CHAIN_B }});
-      // Ligand-coordinating residues within 4 Å (entire residue)
-      // model.setStyle({byres:true, within: {distance: 4.0, sel: {resn:'LIG'}}}, 
-//                      {stick: { radius: 0.20, opacity: 1.0 }});
+      // Use addStyle so we KEEP the underlying cartoon/trace.
+      model.addStyle({ resi: 44 }, { stick: { radius: 0.28, color: YELLOW } }); // Tyr44
+      model.addStyle({ resi: 57 }, { stick: { radius: 0.28, color: RED } });    // Ser57
+      model.addStyle({ resi: 62 }, { stick: { radius: 0.28, color: LIME } });   // Phe62
+      // Optional: if you re-enable these blocks, use addStyle as well:
+      // model.addStyle({chain:'A', resi: [58,59,60,61]}, {stick: { radius: 0.24, color: CHAIN_A }});
+      // model.addStyle({chain:'B', resi: [58,59,60,61]}, {stick: { radius: 0.24, color: CHAIN_B }});
+      // model.addStyle({byres:true, within: {distance: 4.0, sel: {resn:'LIG'}}},
+      //                {stick: { radius: 0.20, opacity: 1.0 }});
     }
 
     function labelAt(text, p){
       if (!el('showLabels').checked) return;
-      // Split labels with [Protomer X] into two lines
+
+      // Split labels like "DNA Binding Domain [Protomer 1]"
       const protomerMatch = text.match(/^(.+?)\s+(\[Protomer \d+\])$/);
+      const dy = 3.0; // larger separation so they visibly appear as two lines
+
       if (protomerMatch) {
-        // First line: domain name (slightly above)
+        // Line 1: domain name (above)
         viewer.addLabel(protomerMatch[1], {
-          position: {x: p.x, y: p.y + 2.4, z: p.z},
+          position: { x: p.x, y: p.y + dy, z: p.z },
           backgroundOpacity: 0.6,
           fontSize: 14
         });
-        // Second line: [Protomer X] (slightly below)
+
+        // Line 2: [Protomer X] (below)
         viewer.addLabel(protomerMatch[2], {
-          position: {x: p.x, y: p.y - 2.4, z: p.z},
+          position: { x: p.x, y: p.y - dy, z: p.z },
           backgroundOpacity: 0.6,
           fontSize: 14
         });
       } else {
-        // Single line label
-        viewer.addLabel(text, { position: p, backgroundOpacity: 0.6, fontSize: 14 });
+        viewer.addLabel(text, {
+          position: p,
+          backgroundOpacity: 0.6,
+          fontSize: 14
+        });
       }
     }
 
@@ -451,17 +476,19 @@
 
     // Apply mobile-specific view adjustments
     function applyMobileViewAdjustments() {
-  if (isMobileView()) {
-    const viewerElement = document.getElementById('viewer');
-    const h = viewerElement ? viewerElement.clientHeight : window.innerHeight;
-    // Move the model upward to roughly the top third of the viewport
-    const offsetY = Math.round(h * 0.28);
-    viewer.translate(0, -offsetY);
-    // Slight zoom-out to compensate for smaller screens
-    viewer.zoom(0.5);
-    viewer.render();
-  }
-}
+      if (isMobileView()) {
+        const viewerEl = document.getElementById('viewer');
+        const h = viewerEl ? viewerEl.clientHeight : 0;
+
+        // Move model upward by ~1/4 of the viewer height
+        const offsetY = -h * 0.25;
+        viewer.translate(0, offsetY);
+
+        // Zoom out a bit so more of the model fits on screen
+        viewer.zoom(0.5);
+        viewer.render();
+      }
+    }
     function draw(){
       stopSpin();
       viewer.clear();
