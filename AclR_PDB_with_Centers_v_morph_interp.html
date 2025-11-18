@@ -1,9 +1,9 @@
-<script src="3Dmol-min.js?v=2025-02-18"></script>
 
 
-<!doctype html>
+<!DOCTYPE html>
 <html>
 <head>
+  <script src="3Dmol-min.js?v=2025-02-18"></script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AclR — PDB + Centers (v8)</title>
@@ -103,8 +103,6 @@
       }
       return out;
     }
-
-
     // ---- Morph interpolation helpers ----
     function parsePDBAtoms(pdbString) {
       if (!pdbString || typeof pdbString !== "string") {
@@ -124,7 +122,17 @@
         const x        = parseFloat(line.slice(30, 38));
         const y        = parseFloat(line.slice(38, 46));
         const z        = parseFloat(line.slice(46, 54));
-        atoms.push({ record, atomName, altLoc, resName, chain, resSeq, iCode, x, y, z, line });
+        atoms.push({
+          record,
+          atomName,
+          altLoc,
+          resName,
+          chain,
+          resSeq,
+          iCode,
+          x, y, z,
+          line
+        });
       }
       return atoms;
     }
@@ -184,10 +192,8 @@
         const offPDB = PDBS["LIGAND_OFF"];
         const onPDB  = PDBS["LIGAND_ON"];
         if (!apoPDB || !offPDB || !onPDB) {
-          console.warn("buildInterpolatedMultiPDB: missing PDB(s)", {
-            hasAPO: !!apoPDB,
-            hasOFF: !!offPDB,
-            hasON:  !!onPDB
+          console.warn("[Morph] Missing one or more PDBs for interpolation:", {
+            APO: !!apoPDB, OFF: !!offPDB, ON: !!onPDB
           });
           return "";
         }
@@ -217,7 +223,7 @@
           }
         }
         if (!commonKeys.length) {
-          console.error("buildInterpolatedMultiPDB: no common atoms across APO/OFF/ON");
+          console.warn("[Morph] No common atoms across APO / OFF / ON.");
           return "";
         }
         commonKeys.sort(atomKeySorter);
@@ -236,8 +242,8 @@
         const onCoords  = coordsFromMap(mapOn);
         const N = apoCoords.length;
         if (offCoords.length !== N || onCoords.length !== N) {
-          console.error("buildInterpolatedMultiPDB: coordinate length mismatch", {
-            N, offN: offCoords.length, onN: onCoords.length
+          console.warn("[Morph] Coordinate array size mismatch:", {
+            apo: N, off: offCoords.length, on: onCoords.length
           });
           return "";
         }
@@ -275,13 +281,15 @@
           out += "ENDMDL\\n";
           modelIndex++;
         }
-        console.log("buildInterpolatedMultiPDB: built", modelIndex - 1, "frames with", N, "atoms");
+
+        console.log(`[Morph] buildInterpolatedMultiPDB: frames=${frames.length}, atoms=${N}`);
         return out;
-      } catch (err) {
-        console.error("buildInterpolatedMultiPDB: error building interpolated PDB", err);
+      } catch (e) {
+        console.error("[Morph] Error in buildInterpolatedMultiPDB:", e);
         return "";
       }
     }
+
 
     // Run a simple morph cycling APO → OFF → ON → OFF → ...
     
@@ -291,39 +299,74 @@
         return;
       }
 
-      // Stop any ongoing spin or animation
+      // Try interpolated multiPDB first, fall back to simple 3-state
+      let multiPDB = "";
+      if (typeof buildInterpolatedMultiPDB === "function") {
+        console.log("[Morph] Trying interpolated multiPDB...");
+        multiPDB = buildInterpolatedMultiPDB();
+      }
+
+      if (!multiPDB || !multiPDB.trim()) {
+        console.warn("[Morph] Interpolated multiPDB empty; falling back to simple 3-state multiPDB.");
+        multiPDB = buildMultiPDB(MORPH_SEQUENCE);
+      }
+
+      if (!multiPDB || !multiPDB.trim()) {
+        console.error("[Morph] buildMultiPDB returned empty string.");
+        alert("No PDB data available for morph sequence. Check that APO_AA', LIGAND_OFF, and LIGAND_ON are loaded.");
+        return;
+      }
+
+      const modelCount = (multiPDB.match(/\nMODEL/g) || []).length;
+      console.log(`[Morph] multiPDB length = ${multiPDB.length} chars, MODEL count = ${modelCount}`);
+
       stopSpin();
       if (viewer.stopAnimate) {
         viewer.stopAnimate();
       }
 
-      // Try to build an interpolated multi-model PDB first
-      let multiPDB = buildInterpolatedMultiPDB();
-      if (!multiPDB || !multiPDB.trim()) {
-        console.warn("runMorphCycle: interpolation failed or empty; falling back to simple multiPDB.");
-        multiPDB = buildMultiPDB(MORPH_SEQUENCE);
-      }
-      if (!multiPDB || !multiPDB.trim()) {
-        alert("No PDB data available for morph sequence.");
+      // Test morph model before clearing viewer
+      let testModel = null;
+      try {
+        testModel = viewer.addModelsAsFrames(multiPDB, "pdb");
+      } catch (e) {
+        console.error("[Morph] addModelsAsFrames threw an error:", e);
+        alert("Failed to create morph model from PDB data. See console for details.");
         return;
       }
 
-      // Clear scene and add all interpolated frames on a single model
+      if (!testModel) {
+        console.error("[Morph] addModelsAsFrames returned null/undefined.");
+        alert("Failed to create morph model (no model returned).");
+        return;
+      }
+
+      const atomCount = (typeof testModel.selectedAtoms === "function")
+        ? testModel.selectedAtoms().length
+        : (testModel.atoms || []).length;
+      const frameCount = (typeof testModel.getFrames === "function")
+        ? testModel.getFrames().length
+        : ((testModel.frames || []).length || 1);
+
+      console.log(`[Morph] morphModel atoms = ${atomCount}, frames = ${frameCount}`);
+
+      if (!atomCount || atomCount === 0) {
+        console.error("[Morph] Morph model has zero atoms – not clearing viewer.");
+        viewer.removeModel(testModel);
+        alert("Morph model appears to have zero atoms. Check the console for '[Morph]' logs.");
+        return;
+      }
+
+      // Now we know the morph model is valid: clear and re-add
       viewer.clear();
       const morphModel = viewer.addModelsAsFrames(multiPDB, "pdb");
-      if (!morphModel) {
-        console.error("runMorphCycle: addModelsAsFrames returned no model.");
-        alert("Failed to create morph model.");
-        return;
-      }
 
-      // Apply styling similar to static models
       showProtein(morphModel);
       if (el('showSidechains').checked) {
         try {
           showSidechains(morphModel);
         } catch (e) {
-          console.warn("runMorphCycle: error applying sidechains style to morph model:", e);
+          console.warn("[Morph] Error applying sidechains to morph model:", e);
         }
       }
 
@@ -334,7 +377,7 @@
       }
       viewer.render();
 
-      // Animate frames in a bounce (back-and-forth) fashion indefinitely
+      console.log("[Morph] Starting animation...");
       viewer.animate({
         loop: "backAndForth",
         reps: 0,
