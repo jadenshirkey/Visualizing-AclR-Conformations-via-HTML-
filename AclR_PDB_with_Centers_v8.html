@@ -380,15 +380,36 @@
 
     function showSidechains(model){
       // Explicit residues: Tyr44 (yellow), Ser57 (red), Phe62 (lime)
-      // Use addStyle so we KEEP the underlying cartoon/trace.
-      model.addStyle({ resi: 44 }, { stick: { radius: 0.55, color: YELLOW } }); // Tyr44
-      model.addStyle({ resi: 57 }, { stick: { radius: 0.55, color: RED } });    // Ser57
-      model.addStyle({ resi: 62 }, { stick: { radius: 0.55, color: LIME } });   // Phe62
-      // Optional: if you re-enable these blocks, use addStyle as well:
-      // model.addStyle({chain:'A', resi: [58,59,60,61]}, {stick: { radius: 0.24, color: CHAIN_A }});
-      // model.addStyle({chain:'B', resi: [58,59,60,61]}, {stick: { radius: 0.24, color: CHAIN_B }});
-      // model.addStyle({byres:true, within: {distance: 4.0, sel: {resn:'LIG'}}},
-      //                {stick: { radius: 0.20, opacity: 1.0 }});
+      // Draw these ON TOP of the existing cartoon (no holes in the ribbon).
+      // We both highlight them with sticks/spheres and add small labels at their CA atoms.
+      const residues = [
+        { resi: 44, color: YELLOW, label: 'Tyr44' },
+        { resi: 57, color: RED,    label: 'Ser57' },
+        { resi: 62, color: LIME,   label: 'Phe62' },
+      ];
+
+      residues.forEach(r => {
+        // Overlay sticks + spheres so they are very obvious
+        model.addStyle(
+          { resi: r.resi },
+          {
+            stick:  { radius: 0.55, color: r.color },
+            sphere: { radius: 1.0,  color: r.color, opacity: 0.95 }
+          }
+        );
+
+        // Also add a label at the first atom of that residue to verify selection visually
+        const atoms = model.selectedAtoms({ resi: r.resi });
+        if (atoms && atoms.length) {
+          const a = atoms[0];
+          viewer.addLabel(r.label, {
+            position: { x: a.x, y: a.y, z: a.z },
+            fontSize: 14,
+            backgroundOpacity: 0.7,
+            inFront: true
+          });
+        }
+      });
     }
 
     function labelAt(text, p){
