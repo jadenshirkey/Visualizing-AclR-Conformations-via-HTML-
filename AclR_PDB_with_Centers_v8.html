@@ -356,6 +356,12 @@
       viewer.addLabel(text, { position: p, backgroundOpacity: 0.6, fontSize: 14 });
     }
 
+    function distanceLabelAt(text, p){
+      // Distance labels require BOTH showCenters AND showLabels to be ON
+      if (!el('showCenters').checked || !el('showLabels').checked) return;
+      viewer.addLabel(text, { position: p, backgroundOpacity: 0.6, fontSize: 14 });
+    }
+
     function chainFromLabel(lbl){
       return (lbl && lbl.endsWith('_B')) ? 'B' : 'A';
     }
@@ -366,7 +372,8 @@
       let count=0;
       for (const p of pts) {
         const ch = chainFromLabel(p.label);
-        const color = (ch === 'B') ? CHAIN_B : CHAIN_A;
+        // Use opposite chain color for better contrast
+        const color = (ch === 'B') ? CHAIN_A : CHAIN_B;
         // Add spheres when Show Centers is checked
         if (el('showCenters').checked) {
           const shape = viewer.addShape({color: color, opacity: 1.0});
@@ -395,7 +402,7 @@
         start: start, end: end, dashed: true, dashLength: 2.0, gapLength: 1.2, linewidth: 3, color: 10265519
       });
       const mid = {x: a.x + dx*0.5, y: a.y + dy*0.5, z: a.z + dz*0.5};
-      labelAt(dist.toFixed(1) + " Å", mid);
+      distanceLabelAt(dist.toFixed(1) + " Å", mid);
     }
 
 
