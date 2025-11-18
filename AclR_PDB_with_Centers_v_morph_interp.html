@@ -89,15 +89,31 @@
     // States participating in morph animation
     const MORPH_SEQUENCE = ["APO_AA'", "LIGAND_OFF", "LIGAND_ON"];
 
-    // ---- Helpers for morph interpolation ----
+    // Build a multi-model PDB string where each state becomes its own MODEL/ENDMDL frame
+    function buildMultiPDB(statesArray) {
+      let modelIndex = 1;
+      let out = "";
+      for (const st of statesArray) {
+        const pdb = (PDBS[st] || "").trim();
+        if (!pdb) continue;
+        out += "MODEL     " + ("" + modelIndex).padStart(4, " ") + "\n";
+        out += pdb + "\n";
+        out += "ENDMDL\n";
+        modelIndex++;
+      }
+      return out;
+    }
 
+
+    // ---- Morph interpolation helpers ----
     function parsePDBAtoms(pdbString) {
+      if (!pdbString || typeof pdbString !== "string") {
+        throw new Error("parsePDBAtoms: invalid PDB string");
+      }
       const atoms = [];
       const lines = pdbString.split(/\r?\n/);
-
       for (const line of lines) {
         if (!line.startsWith("ATOM")) continue;
-
         const record   = line.slice(0, 6).trim();
         const atomName = line.slice(12, 16).trim();
         const altLoc   = line[16] || " ";
@@ -108,20 +124,8 @@
         const x        = parseFloat(line.slice(30, 38));
         const y        = parseFloat(line.slice(38, 46));
         const z        = parseFloat(line.slice(46, 54));
-
-        atoms.push({
-          record,
-          atomName,
-          altLoc,
-          resName,
-          chain,
-          resSeq,
-          iCode,
-          x, y, z,
-          line
-        });
+        atoms.push({ record, atomName, altLoc, resName, chain, resSeq, iCode, x, y, z, line });
       }
-
       return atoms;
     }
 
@@ -139,7 +143,6 @@
     function atomKeySorter(k1, k2) {
       const [c1, r1, i1, rn1, an1, al1] = k1.split("|");
       const [c2, r2, i2, rn2, an2, al2] = k2.split("|");
-
       if (c1 !== c2) return c1 < c2 ? -1 : 1;
       const n1 = parseInt(r1, 10);
       const n2 = parseInt(r2, 10);
@@ -154,7 +157,6 @@
     function interpolateFrames(a, b, nInter) {
       const frames = [];
       const N = a.length;
-
       for (let k = 1; k <= nInter; k++) {
         const t = k / (nInter + 1);
         const frame = new Array(N);
@@ -169,147 +171,161 @@
         }
         frames.push(frame);
       }
-
       return frames;
     }
 
     function formatCoord(v) {
-      // PDB columns 31-38, 39-46, 47-54: 8 chars, 3 decimals
       return v.toFixed(3).toString().padStart(8, " ");
     }
 
-    // Build a multi-model PDB string where each frame is an interpolated snapshot
-    function buildMultiPDB(statesArray) {
-      // We ignore statesArray order here and assume MORPH_SEQUENCE = [APO, OFF, ON]
-      const N_INTER = 30;
-
-      // 1) Parse the three PDB states
-      const parsed = {};
-      for (const state of MORPH_SEQUENCE) {
-        parsed[state] = parsePDBAtoms(PDBS[state] || "");
-      }
-
-      function buildMap(atoms) {
-        const map = new Map();
-        for (const a of atoms) {
-          if (a.record !== "ATOM") continue;
-          const key = atomKey(a);
-          map.set(key, a);
+    function buildInterpolatedMultiPDB() {
+      try {
+        const apoPDB = PDBS["APO_AA'"];
+        const offPDB = PDBS["LIGAND_OFF"];
+        const onPDB  = PDBS["LIGAND_ON"];
+        if (!apoPDB || !offPDB || !onPDB) {
+          console.warn("buildInterpolatedMultiPDB: missing PDB(s)", {
+            hasAPO: !!apoPDB,
+            hasOFF: !!offPDB,
+            hasON:  !!onPDB
+          });
+          return "";
         }
-        return map;
-      }
 
-      const mapApo = buildMap(parsed["APO_AA'"]);
-      const mapOff = buildMap(parsed["LIGAND_OFF"]);
-      const mapOn  = buildMap(parsed["LIGAND_ON"]);
+        const apoAtoms = parsePDBAtoms(apoPDB);
+        const offAtoms = parsePDBAtoms(offPDB);
+        const onAtoms  = parsePDBAtoms(onPDB);
 
-      // 2) Intersection of atom keys across all three states
-      const commonKeys = [];
-      for (const key of mapApo.keys()) {
-        if (mapOff.has(key) && mapOn.has(key)) {
-          commonKeys.push(key);
+        function buildMap(atoms) {
+          const map = new Map();
+          for (const a of atoms) {
+            if (a.record !== "ATOM") continue;
+            const key = atomKey(a);
+            map.set(key, a);
+          }
+          return map;
         }
-      }
 
-      if (commonKeys.length === 0) {
-        console.error("No common atoms across APO / OFF / ON; cannot build morph.");
-        return "";
-      }
+        const mapApo = buildMap(apoAtoms);
+        const mapOff = buildMap(offAtoms);
+        const mapOn  = buildMap(onAtoms);
 
-      commonKeys.sort(atomKeySorter);
+        const commonKeys = [];
+        for (const key of mapApo.keys()) {
+          if (mapOff.has(key) && mapOn.has(key)) {
+            commonKeys.push(key);
+          }
+        }
+        if (!commonKeys.length) {
+          console.error("buildInterpolatedMultiPDB: no common atoms across APO/OFF/ON");
+          return "";
+        }
+        commonKeys.sort(atomKeySorter);
 
-      function coordsFromMap(map) {
-        const arr = [];
+        function coordsFromMap(map) {
+          const arr = [];
+          for (const key of commonKeys) {
+            const a = map.get(key);
+            arr.push([a.x, a.y, a.z]);
+          }
+          return arr;
+        }
+
+        const apoCoords = coordsFromMap(mapApo);
+        const offCoords = coordsFromMap(mapOff);
+        const onCoords  = coordsFromMap(mapOn);
+        const N = apoCoords.length;
+        if (offCoords.length !== N || onCoords.length !== N) {
+          console.error("buildInterpolatedMultiPDB: coordinate length mismatch", {
+            N, offN: offCoords.length, onN: onCoords.length
+          });
+          return "";
+        }
+
+        const N_INTER = 30;
+        const apoOffFrames = interpolateFrames(apoCoords, offCoords, N_INTER);
+        const offOnFrames  = interpolateFrames(offCoords, onCoords, N_INTER);
+
+        const frames = [];
+        frames.push(apoCoords);
+        frames.push(...apoOffFrames);
+        frames.push(offCoords);
+        frames.push(...offOnFrames);
+        frames.push(onCoords);
+
+        const apoTemplate = [];
         for (const key of commonKeys) {
-          const a = map.get(key);
-          arr.push([a.x, a.y, a.z]);
+          apoTemplate.push(mapApo.get(key));
         }
-        return arr;
-      }
 
-      const apoCoords = coordsFromMap(mapApo);
-      const offCoords = coordsFromMap(mapOff);
-      const onCoords  = coordsFromMap(mapOn);
-
-      const N = apoCoords.length;
-      if (offCoords.length !== N || onCoords.length !== N) {
-        console.error("Coordinate arrays differ in size; cannot build morph.");
+        let modelIndex = 1;
+        let out = "";
+        for (const frame of frames) {
+          out += "MODEL     " + ("" + modelIndex).padStart(4, " ") + "\\n";
+          for (let i = 0; i < N; i++) {
+            const tmpl = apoTemplate[i];
+            const [x, y, z] = frame[i];
+            const line = tmpl.line.slice(0, 30)
+                       + formatCoord(x)
+                       + formatCoord(y)
+                       + formatCoord(z)
+                       + tmpl.line.slice(54);
+            out += line + "\\n";
+          }
+          out += "ENDMDL\\n";
+          modelIndex++;
+        }
+        console.log("buildInterpolatedMultiPDB: built", modelIndex - 1, "frames with", N, "atoms");
+        return out;
+      } catch (err) {
+        console.error("buildInterpolatedMultiPDB: error building interpolated PDB", err);
         return "";
       }
-
-      // 3) Build trajectory coordinates: APO → 30×interp → OFF → 30×interp → ON
-      const frames = [];
-      frames.push(apoCoords);
-      frames.push(...interpolateFrames(apoCoords, offCoords, N_INTER));
-      frames.push(offCoords);
-      frames.push(...interpolateFrames(offCoords, onCoords, N_INTER));
-      frames.push(onCoords);
-
-      // 4) Generate multi-model PDB string from these frames using APO as template
-      let modelIndex = 1;
-      let out = "";
-
-      for (const frame of frames) {
-        out += "MODEL     " + ("" + modelIndex).padStart(4, " ") + "\\n";
-
-        for (let i = 0; i < commonKeys.length; i++) {
-          const key = commonKeys[i];
-          const a = mapApo.get(key);
-          const x = frame[i][0];
-          const y = frame[i][1];
-          const z = frame[i][2];
-
-          const oldLine = a.line;
-          const prefix = oldLine.slice(0, 30);
-          const suffix = oldLine.slice(54);
-
-          const newLine = prefix + formatCoord(x) + formatCoord(y) + formatCoord(z) + suffix;
-          out += newLine + "\\n";
-        }
-
-        out += "ENDMDL\\n";
-        modelIndex++;
-      }
-
-      return out;
     }
 
-    // Run a morph cycling APO → OFF → ON → OFF → ...
-
+    // Run a simple morph cycling APO → OFF → ON → OFF → ...
+    
     function runMorphCycle() {
       if (!el('showPDB').checked) {
         alert("Enable 'Show PDB' to run the morph.");
         return;
       }
 
-      const multiPDB = buildMultiPDB(MORPH_SEQUENCE);
-      if (!multiPDB.trim()) {
-        alert("No PDB data available for morph sequence.");
-        return;
-      }
-
-      // Stop any ongoing spin or animation and clear scene
+      // Stop any ongoing spin or animation
       stopSpin();
       if (viewer.stopAnimate) {
         viewer.stopAnimate();
       }
+
+      // Try to build an interpolated multi-model PDB first
+      let multiPDB = buildInterpolatedMultiPDB();
+      if (!multiPDB || !multiPDB.trim()) {
+        console.warn("runMorphCycle: interpolation failed or empty; falling back to simple multiPDB.");
+        multiPDB = buildMultiPDB(MORPH_SEQUENCE);
+      }
+      if (!multiPDB || !multiPDB.trim()) {
+        alert("No PDB data available for morph sequence.");
+        return;
+      }
+
+      // Clear scene and add all interpolated frames on a single model
       viewer.clear();
-
-      // Add all states as frames on a single model
       const morphModel = viewer.addModelsAsFrames(multiPDB, "pdb");
+      if (!morphModel) {
+        console.error("runMorphCycle: addModelsAsFrames returned no model.");
+        alert("Failed to create morph model.");
+        return;
+      }
 
-      // Apply the same styling logic you use for static models
+      // Apply styling similar to static models
       showProtein(morphModel);
       if (el('showSidechains').checked) {
         try {
           showSidechains(morphModel);
         } catch (e) {
-          console.error("showSidechains (morph) error:", e);
+          console.warn("runMorphCycle: error applying sidechains style to morph model:", e);
         }
       }
-
-      // For morphing, keep centers/labels off to avoid static overlays that don't follow the frames.
-      // Users can re-toggle them after morph if desired.
 
       viewer.zoomTo();
       viewer.rotate(180, { x: 1, y: 0, z: 0 });
@@ -325,6 +341,7 @@
         interval: 80
       });
     }
+
 
     const RAW_CENTERS = {"APO_AA'": [{"label": "Ligand Binding Domain [Protomer 1]", "x": 20.040000915527344, "y": 17.3799991607666, "z": 40.65999984741211}, {"label": "Ligand Binding Domain [Protomer 2]", "x": 48.310001373291016, "y": 21.139999389648438, "z": 51.93000030517578}, {"label": "DNA Binding Domain [Protomer 1]", "x": 40.619998931884766, "y": 36.68000030517578, "z": 32.349998474121094}, {"label": "DNA Binding Domain [Protomer 2]", "x": 24.229999542236328, "y": 37.15999984741211, "z": 57.2400016784668}], "APO_BC": [{"label": "Ligand Binding Domain [Protomer 1]", "x": 20.149999618530273, "y": 17.3799991607666, "z": 40.63999938964844}, {"label": "Ligand Binding Domain [Protomer 2]", "x": 48.650001525878906, "y": 21.459999084472656, "z": 51.939998626708984}, {"label": "DNA Binding Domain [Protomer 1]", "x": 40.380001068115234, "y": 36.72999954223633, "z": 32.45000076293945}, {"label": "DNA Binding Domain [Protomer 2]", "x": 24.459999084472656, "y": 37.310001373291016, "z": 57.15999984741211}], "LIGAND_OFF": [{"label": "Ligand Binding Domain [Protomer 1]", "x": 20.329999923706055, "y": 17.6200008392334, "z": 40.34000015258789}, {"label": "Ligand Binding Domain [Protomer 2]", "x": 48.65999984741211, "y": 20.350000381469727, "z": 51.7400016784668}, {"label": "DNA Binding Domain [Protomer 1]", "x": 39.529998779296875, "y": 36.33000183105469, "z": 33.25}, {"label": "DNA Binding Domain [Protomer 2]", "x": 26.889999389648438, "y": 36.77000045776367, "z": 56.79999923706055}], "LIGAND_ON": [{"label": "Ligand Binding Domain [Protomer 1]", "x": 20.329999923706055, "y": 16.040000915527344, "z": 40.54999923706055}, {"label": "Ligand Binding Domain [Protomer 2]", "x": 47.150001525878906, "y": 19.65999984741211, "z": 48.52000045776367}, {"label": "DNA Binding Domain [Protomer 1]", "x": 40.02000045776367, "y": 40.099998474121094, "z": 32.52000045776367}, {"label": "DNA Binding Domain [Protomer 2]", "x": 23.549999237060547, "y": 41.439998626708984, "z": 48.86000061035156}]};
 
