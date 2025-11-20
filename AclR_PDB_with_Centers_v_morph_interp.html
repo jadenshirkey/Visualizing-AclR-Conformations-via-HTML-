@@ -4,7 +4,7 @@
 <script src="https://unpkg.com/3dmol@2.0.4/build/3Dmol-min.js"></script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AclR — PDB + Centers (Fixed Input)</title>
+<title>AclR — PDB + Centers (V4 Restored)</title>
 <style>
   html, body { height:100%; margin:0; }
   body { background:#0b0f14; color:#e5e7eb; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
@@ -53,8 +53,12 @@
 <script>
 document.addEventListener("DOMContentLoaded", function() {
     
-    // --- CONFIGURATION ---
+    // --- USER SETTINGS (Tweak these if needed!) ---
+    const INVERT_SCROLL = true;   // Set to false if scroll direction is still wrong
+    const SCROLL_SPEED  = 1.15;   // Higher number = faster zoom
+    const TOUCH_SPEED   = 1.0;    // Higher number = faster pan
     
+    // --- DATA CONFIGURATION ---
     const PDB_FILES = {
         "APO_AA'": "./AclR_APO_AA'.pdb",
         "APO_BC": "./AclR_APO_BC.pdb",
@@ -85,7 +89,6 @@ document.addEventListener("DOMContentLoaded", function() {
     let baselineView = null;
 
     try {
-        // Note: We enable standard 3Dmol zoom, but we will intercept the wheel event below.
         viewer = $3Dmol.createViewer('viewer', { backgroundColor: 'black', antialias: false, disableFog: true });
     } catch (e) {
         alert("Could not initialize 3Dmol.js. Check console.");
@@ -403,23 +406,26 @@ document.addEventListener("DOMContentLoaded", function() {
     document.addEventListener('mouseup', () => isDragging = false);
 
     // --- INPUT OVERRIDES ---
-
     const vEl = document.getElementById('viewer');
 
-    // 1. FORCE CUSTOM SCROLL
-    // 'capture: true' ensures we catch the event before 3Dmol does
+    // 1. CUSTOM SCROLL (With Flip Logic)
     vEl.addEventListener('wheel', e => {
         e.preventDefault(); 
-        e.stopImmediatePropagation(); // Try to stop 3Dmol from seeing it at all
+        e.stopImmediatePropagation(); 
         
-        // e.deltaY < 0 means "Scrolling Up" / "Wheel Away"
-        // We want this to ZOOM IN (Scale > 1.0)
-        const scaleFactor = (e.deltaY < 0) ? 1.1 : 0.9;
+        // FLIPPED LOGIC:
+        // Previously: (deltaY < 0) ? 1.1 : 0.9  -> You said this zoomed OUT.
+        // New Logic: (deltaY < 0) ? 0.9 : 1.1   -> This should invert it.
+        // However, if INVERT_SCROLL is true, we flip it again.
         
-        viewer.zoom(scaleFactor);
+        let zoomIn = (e.deltaY < 0); // Standard "Wheel Up"
+        if (INVERT_SCROLL) zoomIn = !zoomIn; // Flip for natural scrolling
+        
+        const factor = zoomIn ? SCROLL_SPEED : (1 / SCROLL_SPEED);
+        viewer.zoom(factor);
     }, { passive: false, capture: true });
 
-    // 2. FORCE TWO-FINGER PAN
+    // 2. TWO-FINGER PAN (V4 Logic Restored)
     let lastCenter = null;
     vEl.addEventListener('touchstart', e => {
         if (e.touches.length === 2) {
@@ -440,16 +446,12 @@ document.addEventListener("DOMContentLoaded", function() {
                 y: (e.touches[0].clientY + e.touches[1].clientY)/2 
             };
             
-            // Calculate change
-            const dx = current.x - lastCenter.x;
-            const dy = current.y - lastCenter.y;
+            const dx = (current.x - lastCenter.x) * TOUCH_SPEED;
+            const dy = (current.y - lastCenter.y) * TOUCH_SPEED;
 
-            // If fingers move UP (negative dy), we want model to move UP.
-            // Camera moves opposite to model. 
-            // To move model UP (+Y), Camera must move DOWN (-Y).
-            // Since dy is negative, we pass 'dy' directly to move camera -Y.
-            
-            viewer.translate(dx, dy);
+            // V4 LOGIC RESTORED: note the negative sign on dy!
+            // This creates the "Drag up moves model up" feel.
+            viewer.translate(dx, -dy);
             
             lastCenter = current;
         }
