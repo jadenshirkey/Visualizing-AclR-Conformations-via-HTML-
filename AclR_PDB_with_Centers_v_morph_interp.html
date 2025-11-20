@@ -116,63 +116,149 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // --- Logic Functions ---
 
-    function parsePDBAtoms(pdbString) {
-        if (!pdbString) return [];
-        const atoms = [];
-        const lines = pdbString.split(/\r?\n/); 
-        lines.forEach(line => {
-            if (!line.startsWith("ATOM")) return;
-            atoms.push({
-                // Key for matching: Chain + ResSeq + ResName + AtomName
-                key: line.slice(21, 22) + "|" + line.slice(22, 26).trim() + "|" + line.slice(17, 20).trim() + "|" + line.slice(12, 16).trim(),
-                x: parseFloat(line.slice(30, 38)),
-                y: parseFloat(line.slice(38, 46)),
-                z: parseFloat(line.slice(46, 54)),
-                line: line
-            });
+function parsePDBAtoms(pdbString) {
+      if (!pdbString) return [];
+      const atoms = [];
+      // Split on newlines OR literal "\n" strings
+      const lines = pdbString.split(/\\n|\r?\n/);
+      
+      for (const line of lines) {
+        if (!line.startsWith("ATOM")) continue;
+        
+        // Extract data carefully
+        // We rely on standard PDB column positions
+        const serial = parseInt(line.substring(6, 11).trim(), 10);
+        const atomName = line.substring(12, 16).trim();
+        const altLoc = line.substring(16, 17).trim() || " ";
+        const resName = line.substring(17, 20).trim();
+        const chain = line.substring(21, 22).trim() || " ";
+        const resSeq = parseInt(line.substring(22, 26).trim(), 10);
+        const iCode = line.substring(26, 27).trim() || " ";
+        
+        const x = parseFloat(line.substring(30, 38));
+        const y = parseFloat(line.substring(38, 46));
+        const z = parseFloat(line.substring(46, 54));
+
+        // Create a unique ID for matching atoms across states
+        // ID: Chain | ResSeq | iCode | ResName | AtomName
+        const key = `${chain}|${resSeq}|${iCode}|${resName}|${atomName}`;
+
+        atoms.push({
+          key, serial, atomName, altLoc, resName, chain, resSeq, iCode, x, y, z
         });
-        return atoms;
+      }
+      return atoms;
     }
 
-    function buildInterpolatedMultiPDB(sequence) {
-        const seq = sequence || MORPH_SEQUENCE;
-        // Validate PDB data availability
-        if (seq.some(s => !PDBS[s] || PDBS[s].length < 100)) {
-            console.warn("Missing PDB data for morph sequence");
-            return "";
+    function buildInterpolatedMultiPDB(sequenceOrder) {
+      try {
+        const seq = sequenceOrder || ["APO_AA'", "LIGAND_OFF", "LIGAND_ON"];
+        
+        // 1. Check Data
+        if (seq.some(s => !PDBS[s])) {
+           console.error("[Morph] Missing data for:", seq);
+           return "";
         }
 
-        // Parse all states
-        const parsedStates = seq.map(s => {
-            const atoms = parsePDBAtoms(PDBS[s]);
-            const map = new Map();
-            atoms.forEach(a => map.set(a.key, a));
-            return { map, atoms };
+        // 2. Parse States
+        const maps = seq.map(s => {
+            const m = new Map();
+            parsePDBAtoms(PDBS[s]).forEach(a => m.set(a.key, a));
+            return m;
         });
 
-        // Find common atoms present in ALL states
-        const refMap = parsedStates[0].map;
+        // 3. Find Common Atoms (Intersection)
+        const refMap = maps[0];
         const commonKeys = [];
         for (const key of refMap.keys()) {
-            if (parsedStates.every(s => s.map.has(key))) {
-                commonKeys.push(key);
-            }
+            if (maps.every(m => m.has(key))) commonKeys.push(key);
         }
-        if (commonKeys.length === 0) return "";
 
-        // Create trajectory frames
-        const N_STEPS = 20;
+        if (commonKeys.length === 0) {
+            console.error("[Morph] Zero common atoms found. Check atom naming consistency.");
+            return "";
+        }
+        
+        // Sort by Chain -> Residue -> Atom for valid PDB structure
+        commonKeys.sort((a, b) => {
+            const atomA = refMap.get(a);
+            const atomB = refMap.get(b);
+            if (atomA.chain !== atomB.chain) return atomA.chain.localeCompare(atomB.chain);
+            if (atomA.resSeq !== atomB.resSeq) return atomA.resSeq - atomB.resSeq;
+            return 0; // Keep original order for atoms in same residue
+        });
+
+        // 4. Generate Interpolated Frames
+        const N_STEPS = 20; 
         const frames = [];
         
-        for (let i = 0; i < parsedStates.length; i++) {
-            const startState = parsedStates[i];
-            const endState = parsedStates[(i + 1) % parsedStates.length]; // Loop back
-            
-            // Add start frame
-            const startCoords = commonKeys.map(k => { const a = startState.map.get(k); return [a.x, a.y, a.z]; });
-            frames.push(startCoords);
+        // Helper to format numbers to PDB 8.3 fixed width
+        const fmt = (num) => num.toFixed(3).padStart(8, " ");
 
-            // Interpolate intermediate frames
-            const endCoords = commonKeys.map(k => { const a = endState.map.get(k); return [a.x, a.y, a.z]; });
+        for (let i = 0; i < maps.length; i++) {
+            const startMap = maps[i];
+            const endMap = maps[(i + 1) % maps.length]; // Loop
             
-            for (let j = 1; j <=
+            // Create Keyframes
+            for (let step = 0; step <= N_STEPS; step++) {
+                // Skip the last step of the segment to avoid duplicate frames
+                if (step === N_STEPS && i < maps.length - 1) continue; 
+
+                const t = step / (N_STEPS + 1);
+                const frameLines = [];
+
+                for (const key of commonKeys) {
+                    const aStart = startMap.get(key);
+                    const aEnd = endMap.get(key);
+                    
+                    const x = (1 - t) * aStart.x + t * aEnd.x;
+                    const y = (1 - t) * aStart.y + t * aEnd.y;
+                    const z = (1 - t) * aStart.z + t * aEnd.z;
+
+                    // RECONSTRUCT PDB LINE (Standard 80 columns)
+                    // 1-6: "ATOM  "
+                    // 7-11: Serial (5 chars)
+                    // 13-16: Atom Name (4 chars)
+                    // 17: AltLoc
+                    // 18-20: ResName
+                    // 22: Chain
+                    // 23-26: ResSeq
+                    // 31-54: X, Y, Z (8.3 format)
+                    
+                    const line = 
+                        "ATOM  " + 
+                        aStart.serial.toString().padStart(5, " ") + " " +
+                        aStart.atomName.padEnd(4, " ") +
+                        aStart.altLoc +
+                        aStart.resName.padStart(3, " ") + "  " +
+                        aStart.chain +
+                        aStart.resSeq.toString().padStart(4, " ") +
+                        aStart.iCode + "   " +
+                        fmt(x) + fmt(y) + fmt(z) +
+                        "  1.00  0.00           " + // Occupancy/Temp
+                        aStart.atomName.substring(0,1); // Element guess
+                    
+                    frameLines.push(line);
+                }
+                frames.push(frameLines);
+            }
+        }
+
+        // 5. Build Final String
+        let out = "";
+        let modelIdx = 1;
+        
+        for (const frameLines of frames) {
+            out += "MODEL     " + modelIdx.toString().padStart(4, " ") + "\n";
+            out += frameLines.join("\n") + "\n";
+            out += "ENDMDL\n";
+            modelIdx++;
+        }
+
+        return out;
+
+      } catch (e) {
+        console.error("[Morph] Build Error:", e);
+        return "";
+      }
+    }
