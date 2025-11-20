@@ -4,7 +4,7 @@
 <script src="https://unpkg.com/3dmol@2.0.4/build/3Dmol-min.js"></script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AclR — PDB + Centers (Dynamic)</title>
+<title>AclR — PDB + Centers (Dynamic + Touch)</title>
 <style>
   html, body { height:100%; margin:0; }
   body { background:#0b0f14; color:#e5e7eb; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
@@ -54,8 +54,6 @@
 document.addEventListener("DOMContentLoaded", function() {
     
     // --- Configuration ---
-    
-    // FILE MAPPING: Keys must match values in the <select id="state">
     const PDB_FILES = {
         "APO_AA'": "./AclR_APO_AA'.pdb",
         "APO_BC": "./AclR_APO_BC.pdb",
@@ -63,12 +61,8 @@ document.addEventListener("DOMContentLoaded", function() {
         "LIGAND_ON": "./AclR_LIGAND_ON.pdb"
     };
     
-    // Container for loaded data
     const PDBS = {}; 
-
-    const MORPH_SEQUENCE = ["APO_AA'", "LIGAND_OFF", "LIGAND_ON"];
-    
-    // Centers Data (Hardcoded as these are not in PDB files)
+const MORPH_SEQUENCE = ["APO_AA'", "LIGAND_OFF", "LIGAND_ON", "LIGAND_OFF"];    
     const RAW_CENTERS = {
        "APO_AA'": [{"label": "Ligand Binding Domain [Protomer 1]", "x": 20.04, "y": 17.38, "z": 40.66}, {"label": "Ligand Binding Domain [Protomer 2]", "x": 48.31, "y": 21.14, "z": 51.93}, {"label": "DNA Binding Domain [Protomer 1]", "x": 40.62, "y": 36.68, "z": 32.35}, {"label": "DNA Binding Domain [Protomer 2]", "x": 24.23, "y": 37.16, "z": 57.24}],
        "APO_BC": [{"label": "Ligand Binding Domain [Protomer 1]", "x": 20.15, "y": 17.38, "z": 40.64}, {"label": "Ligand Binding Domain [Protomer 2]", "x": 48.65, "y": 21.46, "z": 51.94}, {"label": "DNA Binding Domain [Protomer 1]", "x": 40.38, "y": 36.73, "z": 32.45}, {"label": "DNA Binding Domain [Protomer 2]", "x": 24.46, "y": 37.31, "z": 57.16}],
@@ -141,15 +135,13 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // --- Logic Functions ---
 
-    // Robust parser for Morphing
     function parsePDBAtoms(pdbString) {
       if (!pdbString) return [];
       const atoms = [];
-      const lines = pdbString.split(/\\n|\r?\n/); // Split by any newline type
+      const lines = pdbString.split(/\\n|\r?\n/); 
       
       for (const line of lines) {
         if (!line.startsWith("ATOM")) continue;
-        
         const serial = parseInt(line.substring(6, 11).trim(), 10);
         const atomName = line.substring(12, 16).trim();
         const altLoc = line.substring(16, 17).trim() || " ";
@@ -157,47 +149,34 @@ document.addEventListener("DOMContentLoaded", function() {
         const chain = line.substring(21, 22).trim() || " ";
         const resSeq = parseInt(line.substring(22, 26).trim(), 10);
         const iCode = line.substring(26, 27).trim() || " ";
-        
         const x = parseFloat(line.substring(30, 38));
         const y = parseFloat(line.substring(38, 46));
         const z = parseFloat(line.substring(46, 54));
-
-        // Key for matching atoms across different files
         const key = `${chain}|${resSeq}|${iCode}|${resName}|${atomName}`;
-
-        atoms.push({
-          key, serial, atomName, altLoc, resName, chain, resSeq, iCode, x, y, z, line
-        });
+        atoms.push({ key, serial, atomName, altLoc, resName, chain, resSeq, iCode, x, y, z, line });
       }
       return atoms;
     }
 
-    // Robust Builder (Reconstructs strict PDB columns to prevent errors)
     function buildInterpolatedMultiPDB(sequenceOrder) {
       try {
         const seq = sequenceOrder || MORPH_SEQUENCE;
-        
         if (seq.some(s => !PDBS[s] || PDBS[s].length < 50)) {
-           console.error("[Morph] Missing data. Ensure PDB files loaded correctly.");
            alert("Error: Some PDB files failed to load from GitHub.");
            return "";
         }
-
         const maps = seq.map(s => {
             const m = new Map();
             parsePDBAtoms(PDBS[s]).forEach(a => m.set(a.key, a));
             return m;
         });
-
         const refMap = maps[0];
         const commonKeys = [];
         for (const key of refMap.keys()) {
             if (maps.every(m => m.has(key))) commonKeys.push(key);
         }
-
         if (commonKeys.length === 0) return "";
         
-        // Sort to keep structure valid (Chain A -> Chain B)
         commonKeys.sort((a, b) => {
             const atomA = refMap.get(a);
             const atomB = refMap.get(b);
@@ -206,7 +185,7 @@ document.addEventListener("DOMContentLoaded", function() {
             return 0; 
         });
 
-        const N_STEPS = 20; 
+        const N_STEPS = 50; 
         const frames = [];
         const fmt = (num) => num.toFixed(3).padStart(8, " "); 
 
@@ -214,14 +193,11 @@ document.addEventListener("DOMContentLoaded", function() {
             const startMap = maps[i];
             const endMap = maps[(i + 1) % maps.length];
             
-            // Create interpolation frames
             for (let step = 0; step <= N_STEPS; step++) {
-                // Avoid duplicating keyframes
                 if (step === N_STEPS && i < maps.length - 1) continue; 
 
                 const t = step / (N_STEPS + 1);
                 const frameLines = [];
-
                 for (const key of commonKeys) {
                     const aStart = startMap.get(key);
                     const aEnd = endMap.get(key);
@@ -230,7 +206,6 @@ document.addEventListener("DOMContentLoaded", function() {
                     const y = (1 - t) * aStart.y + t * aEnd.y;
                     const z = (1 - t) * aStart.z + t * aEnd.z;
 
-                    // Strictly formatted PDB line
                     const line = 
                         "ATOM  " + 
                         aStart.serial.toString().padStart(5, " ") + " " +
@@ -258,49 +233,36 @@ document.addEventListener("DOMContentLoaded", function() {
             out += "ENDMDL\n";
             modelIdx++;
         }
-
         return out;
-
-      } catch (e) {
-        console.error("[Morph] Build Error:", e);
-        return "";
-      }
+      } catch (e) { console.error(e); return ""; }
     }
 
     function runMorphCycle() {
         if (!el('showPDB').checked) return alert("Enable 'Show PDB' first.");
         
         const currentView = viewer.getView();
-        
-        // Reorder sequence to start from current state
         const current = state;
         const baseSeq = MORPH_SEQUENCE;
         const idx = baseSeq.indexOf(current);
         let morphSeq = baseSeq;
-        
         if (idx > -1) {
             morphSeq = [...baseSeq.slice(idx), ...baseSeq.slice(0, idx)];
         }
 
         status.textContent = "Calculating morph...";
-        // Small timeout to allow UI to update text before heavy calculation
         setTimeout(() => {
             const multiPDB = buildInterpolatedMultiPDB(morphSeq);
             if (!multiPDB) {
-                alert("Morph failed. Ensure all files loaded successfully.");
+                alert("Morph failed.");
                 return;
             }
-
             stopSpin();
             if(viewer.stopAnimate) viewer.stopAnimate();
             viewer.clear();
-            
             const m = viewer.addModelsAsFrames(multiPDB, "pdb");
             showProtein(m);
             if (el('showSidechains').checked) try { showSidechains(m); } catch(e){}
-            
             if (currentView) viewer.setView(currentView);
-            
             viewer.render();
             viewer.animate({ loop: "forward", reps: 0, interval: 40 });
             status.textContent = "Morphing...";
@@ -349,18 +311,13 @@ document.addEventListener("DOMContentLoaded", function() {
             const color = (ch === 'B') ? CHAIN_A : CHAIN_B;
             if (el('showCenters').checked) {
                 viewer.addSphere({ center: {x:p.x, y:p.y, z:p.z}, radius: 2.2, color: color, opacity: 1.0 });
-                
-                // Add distance lines only if centers are active
                 const l1 = pts.find(q => q.label === "Ligand Binding Domain [Protomer 1]");
                 const l2 = pts.find(q => q.label === "Ligand Binding Domain [Protomer 2]");
                 if(p === l1 && l2) addDashedDistance(l1, l2);
-                
                 const d1 = pts.find(q => q.label === "DNA Binding Domain [Protomer 1]");
                 const d2 = pts.find(q => q.label === "DNA Binding Domain [Protomer 2]");
                 if(p === d1 && d2) addDashedDistance(d1, d2);
             }
-            
-            // Labels
             if (el('showLabels').checked) {
                 const dy = 1.5;
                 const match = p.label.match(/^(.+?)\s+(\[Protomer \d+\])$/);
@@ -379,7 +336,6 @@ document.addEventListener("DOMContentLoaded", function() {
     function draw() {
         let prev = null;
         try { prev = viewer.getView(); } catch(e){}
-
         stopSpin();
         if (viewer.stopAnimate) viewer.stopAnimate();
         viewer.clear();
@@ -390,25 +346,18 @@ document.addEventListener("DOMContentLoaded", function() {
                 const m = viewer.addModel(pdb, "pdb");
                 showProtein(m);
                 if (el('showSidechains').checked) try { showSidechains(m); } catch(e){}
-            } else {
-                // viewer.addLabel("Loading or Missing: " + state, { fontSize: 16, backgroundOpacity: 0.6 });
             }
         }
-        
         const cCount = addCenters();
-
         if (prev) viewer.setView(prev);
         else viewer.zoomTo();
-
         viewer.render();
         status.textContent = "State: " + state + 
             " · Mode: " + (el('fastMode').checked ? "Fast" : "Cartoon") +
             " · Centers: " + (el('showCenters').checked ? cCount : "Hidden");
-        
         if (el('spin').checked) startSpin();
     }
 
-    // --- Interaction ---
     let spinRAF = null;
     function startSpin(){
         stopSpin();
@@ -423,7 +372,6 @@ document.addEventListener("DOMContentLoaded", function() {
     }
     function stopSpin(){ if(spinRAF) cancelAnimationFrame(spinRAF); spinRAF=null; }
 
-    // Event Listeners
     el('state').onchange = ()=>{ state = el('state').value; draw(); };
     el('showPDB').onchange = draw;
     el('fastMode').onchange = draw;
@@ -451,18 +399,56 @@ document.addEventListener("DOMContentLoaded", function() {
     });
     document.addEventListener('mouseup', () => isDragging = false);
 
+    // --- RESTORED INTERACTION HANDLERS ---
+    
+    const vEl = document.getElementById('viewer');
+
+    // 1. Custom Scroll (Up = Zoom IN)
+    vEl.addEventListener('wheel', e => {
+        e.preventDefault();
+        // deltaY < 0 means scrolling up -> Zoom In (scale > 1)
+        const factor = (e.deltaY < 0) ? 1.1 : 0.9;
+        viewer.zoom(factor);
+    }, { passive: false });
+
+    // 2. Two-Finger Pan (Restored logic from V4)
+    let lastCenter = null;
+    vEl.addEventListener('touchstart', e => {
+        if (e.touches.length === 2) {
+            lastCenter = { 
+                x: (e.touches[0].clientX + e.touches[1].clientX)/2, 
+                y: (e.touches[0].clientY + e.touches[1].clientY)/2 
+            };
+        }
+    }, {passive: false});
+
+    vEl.addEventListener('touchmove', e => {
+        if (e.touches.length === 2 && lastCenter) {
+            e.preventDefault();
+            const current = { 
+                x: (e.touches[0].clientX + e.touches[1].clientX)/2, 
+                y: (e.touches[0].clientY + e.touches[1].clientY)/2 
+            };
+            
+            // Calculate raw delta
+            const dx = current.x - lastCenter.x;
+            const dy = current.y - lastCenter.y;
+
+            // Apply translation using V4 logic (Finger Up -> Model Up)
+            viewer.translate(dx, -dy);
+
+            lastCenter = current;
+        }
+    }, {passive: false});
+
     // --- Main Execution ---
     (async function startup() {
         await loadData();
-        
-        // Initial draw after data load
         draw();
         viewer.rotate(180, {x:1, y:0, z:0});
         viewer.zoomTo();
         viewer.render();
         baselineView = viewer.getView();
-        
-        // Mobile adjustments
         if (window.innerWidth < 768) {
             viewer.translate(0, -document.getElementById('viewer').clientHeight * 0.25);
             viewer.zoom(0.5);
