@@ -1,33 +1,203 @@
-function buildInterpolatedMultiPDB(sequenceOrder) {
-      try {
-        const seq = sequenceOrder || ["APO_AA'", "LIGAND_OFF", "LIGAND_ON"];
+<!DOCTYPE html>
+<html>
+<head>
+<script src="https://unpkg.com/3dmol@2.0.4/build/3Dmol-min.js"></script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AclR — PDB + Centers (Dynamic)</title>
+<style>
+  html, body { height:100%; margin:0; }
+  body { background:#0b0f14; color:#e5e7eb; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  .bar { display:flex; gap:10px; align-items:center; padding:10px 12px; border-bottom:1px solid #1f2937; flex-wrap:wrap; }
+  select, button, label, input { font-size:14px; }
+  select, button { background:#111827; color:#e5e7eb; border:1px solid #374151; border-radius:8px; padding:6px 8px; }
+  button:hover { background:#1f2937; border-color:#4b5563; }
+  button:active { background:#0f172a; transform:translateY(1px); }
+  button.button-active { background:#60a5fa; border-color:#3b82f6; transform:scale(0.95); }
+  label { display:inline-flex; align-items:center; gap:6px; }
+  #viewer { position:relative; height: calc(100vh - 52px); }
+  .status { position:absolute; left:10px; top:10px; font-size:12px; background:rgba(17,24,39,.85); border:1px solid #374151; border-radius:8px; padding:6px 8px; pointer-events:none; }
+  .legend { position:absolute; left:87.5%; top:50%; transform:translate(-50%, -50%); font-size:18px; background:rgba(17,24,39,.92); border:1px solid #374151; border-radius:12px; padding:20px 24px; cursor:move; min-width:300px; user-select:none; z-index:100; }
+  .legend.hidden { display:none; }
+  .legend-toggle { position:absolute; left:87.5%; top:10px; transform:translateX(-50%); background:#111827; color:#e5e7eb; border:1px solid #374151; border-radius:8px; padding:8px 16px; font-size:14px; font-weight:500; cursor:pointer; z-index:1000; }
+  
+  @media (max-width:767px) {
+    .legend { left:50%; top:auto; bottom:10px; transform:translate(-50%, 0); font-size:16px; padding:16px 20px; min-width:280px; max-width:calc(100vw - 20px); max-height:40vh; overflow-y:auto; }
+    .legend-toggle { left:auto; right:10px; top:10px; transform:none; }
+  }
+</style>
+</head>
+<body>
+<div class="bar">
+  <b style="opacity:.9">AclR:</b>
+  <label>State
+    <select id="state">
+      <option value="APO_AA'">APO (AA')</option>
+      <option value="APO_BC">APO (BC)</option>
+      <option value="LIGAND_OFF" selected>+LIG, OFF</option>
+      <option value="LIGAND_ON">+LIG, ON</option>
+    </select>
+  </label>
+  <label><input type="checkbox" id="showPDB" checked> Show PDB</label>
+  <label><input type="checkbox" id="fastMode"> Fast mode</label>
+  <label><input type="checkbox" id="showCenters"> Show centers</label>
+  <label><input type="checkbox" id="showSidechains" checked> Sidechains</label>
+  <label><input type="checkbox" id="showLabels"> Labels</label>
+  <label><input type="checkbox" id="spin" checked> Spin</label>
+  <button id="morph">Morph APO ↔ OFF ↔ ON</button>
+  <button id="reset">Reset view</button>
+</div>
+
+<div id="viewer"></div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    
+    // --- Configuration ---
+    
+    // FILE MAPPING: Keys must match values in the <select id="state">
+    const PDB_FILES = {
+        "APO_AA'": "./AclR_APO_AA'.pdb",
+        "APO_BC": "./AclR_APO_BC.pdb",
+        "LIGAND_OFF": "./AclR_LIGAND_OFF.pdb",
+        "LIGAND_ON": "./AclR_LIGAND_ON.pdb"
+    };
+    
+    // Container for loaded data
+    const PDBS = {}; 
+
+    const MORPH_SEQUENCE = ["APO_AA'", "LIGAND_OFF", "LIGAND_ON"];
+    
+    // Centers Data (Hardcoded as these are not in PDB files)
+    const RAW_CENTERS = {
+       "APO_AA'": [{"label": "Ligand Binding Domain [Protomer 1]", "x": 20.04, "y": 17.38, "z": 40.66}, {"label": "Ligand Binding Domain [Protomer 2]", "x": 48.31, "y": 21.14, "z": 51.93}, {"label": "DNA Binding Domain [Protomer 1]", "x": 40.62, "y": 36.68, "z": 32.35}, {"label": "DNA Binding Domain [Protomer 2]", "x": 24.23, "y": 37.16, "z": 57.24}],
+       "APO_BC": [{"label": "Ligand Binding Domain [Protomer 1]", "x": 20.15, "y": 17.38, "z": 40.64}, {"label": "Ligand Binding Domain [Protomer 2]", "x": 48.65, "y": 21.46, "z": 51.94}, {"label": "DNA Binding Domain [Protomer 1]", "x": 40.38, "y": 36.73, "z": 32.45}, {"label": "DNA Binding Domain [Protomer 2]", "x": 24.46, "y": 37.31, "z": 57.16}],
+       "LIGAND_OFF": [{"label": "Ligand Binding Domain [Protomer 1]", "x": 20.33, "y": 17.62, "z": 40.34}, {"label": "Ligand Binding Domain [Protomer 2]", "x": 48.66, "y": 20.35, "z": 51.74}, {"label": "DNA Binding Domain [Protomer 1]", "x": 39.53, "y": 36.33, "z": 33.25}, {"label": "DNA Binding Domain [Protomer 2]", "x": 26.89, "y": 36.77, "z": 56.80}],
+       "LIGAND_ON": [{"label": "Ligand Binding Domain [Protomer 1]", "x": 20.33, "y": 16.04, "z": 40.55}, {"label": "Ligand Binding Domain [Protomer 2]", "x": 47.15, "y": 19.66, "z": 48.52}, {"label": "DNA Binding Domain [Protomer 1]", "x": 40.02, "y": 40.10, "z": 32.52}, {"label": "DNA Binding Domain [Protomer 2]", "x": 23.55, "y": 41.44, "z": 48.86}]
+    };
+
+    const CHAIN_A = 0x800000; 
+    const CHAIN_B = 0xffffff; 
+    const YELLOW  = 0xFFD700; 
+    const LIME    = 0x32CD32; 
+    const RED     = 0xFF0000; 
+
+    let state = "LIGAND_OFF";
+    const el = (id) => document.getElementById(id);
+    let viewer = null;
+    let baselineView = null;
+
+    // Initialize Viewer
+    try {
+        viewer = $3Dmol.createViewer('viewer', { backgroundColor: 'black', antialias: false, disableFog: true });
+    } catch (e) {
+        alert("Could not initialize 3Dmol.js. Check console.");
+    }
+
+    // --- UI Elements ---
+    const status = document.createElement('div');
+    status.className = 'status';
+    status.textContent = "Initializing...";
+    document.getElementById('viewer').appendChild(status);
+
+    const legend = document.createElement('div');
+    legend.className = 'legend';
+    legend.innerHTML = `
+      <div><b>PROTOMERS:</b></div>
+      <div><span style="display:inline-block;width:10px;height:10px;background:#800000;margin-right:6px;"></span>Chain A</div>
+      <div><span style="display:inline-block;width:10px;height:10px;background:#ffffff;margin-right:6px;border:1px solid #ccc;box-sizing:border-box;"></span>Chain B</div>
+      <div><b>RESIDUES:</b></div>
+      <div><span style="display:inline-block;width:10px;height:10px;background:#ffd700;margin-right:6px;"></span>Tyr44</div>
+      <div><span style="display:inline-block;width:10px;height:10px;background:#ff0000;margin-right:6px;"></span>Ser57</div>
+      <div><span style="display:inline-block;width:10px;height:10px;background:#32cd32;margin-right:6px;"></span>Phe62</div>
+      <div style="margin-top:6px;opacity:.75;">Ligand: C8-Acyl-Cyclo-Lysine</div>`;
+    document.getElementById('viewer').appendChild(legend);
+
+    const toggleBtn = document.createElement('button');
+    toggleBtn.className = 'legend-toggle';
+    toggleBtn.textContent = 'Hide Legend';
+    toggleBtn.onclick = () => {
+        legend.classList.toggle('hidden');
+        toggleBtn.textContent = legend.classList.contains('hidden') ? 'Show Legend' : 'Hide Legend';
+    };
+    document.getElementById('viewer').appendChild(toggleBtn);
+
+    // --- Loading Function ---
+    async function loadData() {
+        status.textContent = "Fetching PDB files...";
+        const promises = Object.keys(PDB_FILES).map(async key => {
+            try {
+                const response = await fetch(PDB_FILES[key]);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                PDBS[key] = await response.text();
+            } catch (err) {
+                console.error(`Failed to load ${key}:`, err);
+                PDBS[key] = ""; // Fallback empty string
+            }
+        });
+        await Promise.all(promises);
+        status.textContent = "Ready.";
+    }
+
+    // --- Logic Functions ---
+
+    // Robust parser for Morphing
+    function parsePDBAtoms(pdbString) {
+      if (!pdbString) return [];
+      const atoms = [];
+      const lines = pdbString.split(/\\n|\r?\n/); // Split by any newline type
+      
+      for (const line of lines) {
+        if (!line.startsWith("ATOM")) continue;
         
-        // 1. Check Data
-        if (seq.some(s => !PDBS[s])) {
-           console.error("[Morph] Missing data for:", seq);
+        const serial = parseInt(line.substring(6, 11).trim(), 10);
+        const atomName = line.substring(12, 16).trim();
+        const altLoc = line.substring(16, 17).trim() || " ";
+        const resName = line.substring(17, 20).trim();
+        const chain = line.substring(21, 22).trim() || " ";
+        const resSeq = parseInt(line.substring(22, 26).trim(), 10);
+        const iCode = line.substring(26, 27).trim() || " ";
+        
+        const x = parseFloat(line.substring(30, 38));
+        const y = parseFloat(line.substring(38, 46));
+        const z = parseFloat(line.substring(46, 54));
+
+        // Key for matching atoms across different files
+        const key = `${chain}|${resSeq}|${iCode}|${resName}|${atomName}`;
+
+        atoms.push({
+          key, serial, atomName, altLoc, resName, chain, resSeq, iCode, x, y, z, line
+        });
+      }
+      return atoms;
+    }
+
+    // Robust Builder (Reconstructs strict PDB columns to prevent errors)
+    function buildInterpolatedMultiPDB(sequenceOrder) {
+      try {
+        const seq = sequenceOrder || MORPH_SEQUENCE;
+        
+        if (seq.some(s => !PDBS[s] || PDBS[s].length < 50)) {
+           console.error("[Morph] Missing data. Ensure PDB files loaded correctly.");
+           alert("Error: Some PDB files failed to load from GitHub.");
            return "";
         }
 
-        // 2. Parse States
         const maps = seq.map(s => {
             const m = new Map();
             parsePDBAtoms(PDBS[s]).forEach(a => m.set(a.key, a));
             return m;
         });
 
-        // 3. Find Common Atoms
         const refMap = maps[0];
         const commonKeys = [];
         for (const key of refMap.keys()) {
             if (maps.every(m => m.has(key))) commonKeys.push(key);
         }
 
-        if (commonKeys.length === 0) {
-            console.error("[Morph] Zero common atoms found.");
-            return "";
-        }
+        if (commonKeys.length === 0) return "";
         
-        // Sort by Chain -> Residue -> Atom
+        // Sort to keep structure valid (Chain A -> Chain B)
         commonKeys.sort((a, b) => {
             const atomA = refMap.get(a);
             const atomB = refMap.get(b);
@@ -36,16 +206,17 @@ function buildInterpolatedMultiPDB(sequenceOrder) {
             return 0; 
         });
 
-        // 4. Generate Interpolated Frames
         const N_STEPS = 20; 
         const frames = [];
-        const fmt = (num) => num.toFixed(3).padStart(8, " "); // Fixed width float
+        const fmt = (num) => num.toFixed(3).padStart(8, " "); 
 
         for (let i = 0; i < maps.length; i++) {
             const startMap = maps[i];
             const endMap = maps[(i + 1) % maps.length];
             
+            // Create interpolation frames
             for (let step = 0; step <= N_STEPS; step++) {
+                // Avoid duplicating keyframes
                 if (step === N_STEPS && i < maps.length - 1) continue; 
 
                 const t = step / (N_STEPS + 1);
@@ -59,23 +230,13 @@ function buildInterpolatedMultiPDB(sequenceOrder) {
                     const y = (1 - t) * aStart.y + t * aEnd.y;
                     const z = (1 - t) * aStart.z + t * aEnd.z;
 
-                    // RECONSTRUCT PDB LINE (Strict Columns)
-                    // Columns are 1-based in spec, 0-based in JS string
-                    // 0-5: "ATOM  "
-                    // 6-10: Serial
-                    // 12-15: Atom Name
-                    // 16: AltLoc
-                    // 17-19: ResName
-                    // 21: Chain
-                    // 22-25: ResSeq
-                    // 30-54: X, Y, Z
-                    
+                    // Strictly formatted PDB line
                     const line = 
                         "ATOM  " + 
                         aStart.serial.toString().padStart(5, " ") + " " +
                         aStart.atomName.padEnd(4, " ") +
                         aStart.altLoc +
-                        aStart.resName.padStart(3, " ") + " " + // Fixed: Single space here
+                        aStart.resName.padStart(3, " ") + " " + 
                         aStart.chain +
                         aStart.resSeq.toString().padStart(4, " ") +
                         aStart.iCode + "   " +
@@ -89,10 +250,8 @@ function buildInterpolatedMultiPDB(sequenceOrder) {
             }
         }
 
-        // 5. Build Final String
         let out = "";
         let modelIdx = 1;
-        
         for (const frameLines of frames) {
             out += "MODEL     " + modelIdx.toString().padStart(4, " ") + "\n";
             out += frameLines.join("\n") + "\n";
@@ -107,3 +266,210 @@ function buildInterpolatedMultiPDB(sequenceOrder) {
         return "";
       }
     }
+
+    function runMorphCycle() {
+        if (!el('showPDB').checked) return alert("Enable 'Show PDB' first.");
+        
+        const currentView = viewer.getView();
+        
+        // Reorder sequence to start from current state
+        const current = state;
+        const baseSeq = MORPH_SEQUENCE;
+        const idx = baseSeq.indexOf(current);
+        let morphSeq = baseSeq;
+        
+        if (idx > -1) {
+            morphSeq = [...baseSeq.slice(idx), ...baseSeq.slice(0, idx)];
+        }
+
+        status.textContent = "Calculating morph...";
+        // Small timeout to allow UI to update text before heavy calculation
+        setTimeout(() => {
+            const multiPDB = buildInterpolatedMultiPDB(morphSeq);
+            if (!multiPDB) {
+                alert("Morph failed. Ensure all files loaded successfully.");
+                return;
+            }
+
+            stopSpin();
+            if(viewer.stopAnimate) viewer.stopAnimate();
+            viewer.clear();
+            
+            const m = viewer.addModelsAsFrames(multiPDB, "pdb");
+            showProtein(m);
+            if (el('showSidechains').checked) try { showSidechains(m); } catch(e){}
+            
+            if (currentView) viewer.setView(currentView);
+            
+            viewer.render();
+            viewer.animate({ loop: "forward", reps: 0, interval: 40 });
+            status.textContent = "Morphing...";
+        }, 50);
+    }
+
+    function showProtein(model){
+        if (el('fastMode').checked) {
+            model.setStyle({chain:'A'}, {line: { color: CHAIN_A, linewidth: 2 }});
+            model.setStyle({chain:'B'}, {line: { color: CHAIN_B, linewidth: 2 }});
+        } else {
+            model.setStyle({chain:'A'}, {cartoon: { color: CHAIN_A, opacity: 0.98 }});
+            model.setStyle({chain:'B'}, {cartoon: { color: CHAIN_B, opacity: 0.98 }});
+        }
+        model.setStyle({resn:'LIG'}, {stick: { radius: 0.25 }, sphere: { radius: 0.55 }});
+    }
+
+    function showSidechains(model){
+        const targets = [
+            { chain: 'A', resi: 44, color: YELLOW }, { chain: 'B', resi: 44, color: YELLOW },
+            { chain: 'A', resi: 57, color: RED },    { chain: 'B', resi: 57, color: RED },
+            { chain: 'A', resi: 62, color: LIME },   { chain: 'B', resi: 62, color: LIME }
+        ];
+        targets.forEach(t => {
+            const cartoonColor = (t.chain === 'B') ? CHAIN_B : CHAIN_A;
+            model.setStyle({ chain: t.chain, resi: t.resi }, 
+                { cartoon: { color: cartoonColor, opacity: 0.98 }, stick: { radius: 0.25, color: t.color } }
+            );
+        });
+    }
+
+    function addDashedDistance(a, b){
+        const start = {x:a.x, y:a.y, z:a.z};
+        const end   = {x:b.x, y:b.y, z:b.z};
+        const dist = Math.sqrt(Math.pow(b.x-a.x,2) + Math.pow(b.y-a.y,2) + Math.pow(b.z-a.z,2));
+        viewer.addLine({ start: start, end: end, dashed: true, dashLength: 2.0, gapLength: 1.2, linewidth: 3, color: 10265519 });
+        const mid = {x: (a.x+b.x)/2, y: (a.y+b.y)/2, z: (a.z+b.z)/2};
+        viewer.addLabel(dist.toFixed(1) + " Å", { position: mid, backgroundOpacity: 0.6, fontSize: 14 });
+    }
+
+    function addCenters(){
+        const pts = RAW_CENTERS[state] || [];
+        let count = 0;
+        pts.forEach(p => {
+            const ch = p.label.includes('Protomer 2') ? 'B' : 'A';
+            const color = (ch === 'B') ? CHAIN_A : CHAIN_B;
+            if (el('showCenters').checked) {
+                viewer.addSphere({ center: {x:p.x, y:p.y, z:p.z}, radius: 2.2, color: color, opacity: 1.0 });
+                
+                // Add distance lines only if centers are active
+                const l1 = pts.find(q => q.label === "Ligand Binding Domain [Protomer 1]");
+                const l2 = pts.find(q => q.label === "Ligand Binding Domain [Protomer 2]");
+                if(p === l1 && l2) addDashedDistance(l1, l2);
+                
+                const d1 = pts.find(q => q.label === "DNA Binding Domain [Protomer 1]");
+                const d2 = pts.find(q => q.label === "DNA Binding Domain [Protomer 2]");
+                if(p === d1 && d2) addDashedDistance(d1, d2);
+            }
+            
+            // Labels
+            if (el('showLabels').checked) {
+                const dy = 1.5;
+                const match = p.label.match(/^(.+?)\s+(\[Protomer \d+\])$/);
+                if (match) {
+                    viewer.addLabel(match[1], { position: {x:p.x, y:p.y+dy, z:p.z}, backgroundOpacity: 0.6, fontSize: 14 });
+                    viewer.addLabel(match[2], { position: {x:p.x, y:p.y-dy, z:p.z}, backgroundOpacity: 0.6, fontSize: 14 });
+                } else {
+                    viewer.addLabel(p.label, { position: {x:p.x, y:p.y, z:p.z}, backgroundOpacity: 0.6, fontSize: 14 });
+                }
+            }
+            count++;
+        });
+        return count;
+    }
+
+    function draw() {
+        let prev = null;
+        try { prev = viewer.getView(); } catch(e){}
+
+        stopSpin();
+        if (viewer.stopAnimate) viewer.stopAnimate();
+        viewer.clear();
+
+        if (el('showPDB').checked) {
+            const pdb = PDBS[state];
+            if (pdb && pdb.trim()) {
+                const m = viewer.addModel(pdb, "pdb");
+                showProtein(m);
+                if (el('showSidechains').checked) try { showSidechains(m); } catch(e){}
+            } else {
+                // viewer.addLabel("Loading or Missing: " + state, { fontSize: 16, backgroundOpacity: 0.6 });
+            }
+        }
+        
+        const cCount = addCenters();
+
+        if (prev) viewer.setView(prev);
+        else viewer.zoomTo();
+
+        viewer.render();
+        status.textContent = "State: " + state + 
+            " · Mode: " + (el('fastMode').checked ? "Fast" : "Cartoon") +
+            " · Centers: " + (el('showCenters').checked ? cCount : "Hidden");
+        
+        if (el('spin').checked) startSpin();
+    }
+
+    // --- Interaction ---
+    let spinRAF = null;
+    function startSpin(){
+        stopSpin();
+        let last = performance.now();
+        function step(now){
+            const dt = (now - last)/1000; last = now;
+            viewer.rotate(10 * dt, {x:0, y:1, z:0});
+            viewer.render();
+            spinRAF = requestAnimationFrame(step);
+        }
+        spinRAF = requestAnimationFrame(step);
+    }
+    function stopSpin(){ if(spinRAF) cancelAnimationFrame(spinRAF); spinRAF=null; }
+
+    // Event Listeners
+    el('state').onchange = ()=>{ state = el('state').value; draw(); };
+    el('showPDB').onchange = draw;
+    el('fastMode').onchange = draw;
+    el('showCenters').onchange = draw;
+    el('showSidechains').onchange = draw;
+    el('showLabels').onchange = draw;
+    el('spin').onchange = ()=> { if (el('spin').checked) startSpin(); else stopSpin(); };
+    el('morph').onclick = runMorphCycle;
+    el('reset').onclick = () => {
+        if (baselineView) viewer.setView(baselineView);
+        else viewer.zoomTo();
+        draw();
+    };
+    
+    // Legend Drag
+    let isDragging = false, startX, startY, initialX, initialY;
+    const leg = legend;
+    leg.addEventListener('mousedown', (e) => { isDragging = true; startX = e.clientX; startY = e.clientY; initialX = leg.offsetLeft; initialY = leg.offsetTop; leg.style.transform = 'none'; leg.style.left = initialX + 'px'; leg.style.top = initialY + 'px'; });
+    document.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        leg.style.left = (initialX + dx) + 'px';
+        leg.style.top = (initialY + dy) + 'px';
+    });
+    document.addEventListener('mouseup', () => isDragging = false);
+
+    // --- Main Execution ---
+    (async function startup() {
+        await loadData();
+        
+        // Initial draw after data load
+        draw();
+        viewer.rotate(180, {x:1, y:0, z:0});
+        viewer.zoomTo();
+        viewer.render();
+        baselineView = viewer.getView();
+        
+        // Mobile adjustments
+        if (window.innerWidth < 768) {
+            viewer.translate(0, -document.getElementById('viewer').clientHeight * 0.25);
+            viewer.zoom(0.5);
+            viewer.render();
+        }
+    })();
+});
+</script>
+</body>
+</html>
