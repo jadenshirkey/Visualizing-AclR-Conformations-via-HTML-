@@ -4,7 +4,7 @@
 <script src="https://unpkg.com/3dmol@2.0.4/build/3Dmol-min.js"></script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AclR — PDB + Centers (Final Fixed)</title>
+<title>AclR — PDB + Centers (Fixed Input)</title>
 <style>
   html, body { height:100%; margin:0; }
   body { background:#0b0f14; color:#e5e7eb; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
@@ -53,16 +53,23 @@
 <script>
 document.addEventListener("DOMContentLoaded", function() {
     
-    // --- Configuration ---
+    // --- CONFIGURATION ---
+    
     const PDB_FILES = {
         "APO_AA'": "./AclR_APO_AA'.pdb",
         "APO_BC": "./AclR_APO_BC.pdb",
         "LIGAND_OFF": "./AclR_LIGAND_OFF.pdb",
         "LIGAND_ON": "./AclR_LIGAND_ON.pdb"
     };
+
+    const MORPH_SEQUENCE = ["APO_AA'", "LIGAND_OFF", "LIGAND_ON", "LIGAND_OFF"];
     
     const PDBS = {}; 
-    const MORPH_SEQUENCE = ["APO_AA'", "LIGAND_OFF", "LIGAND_ON", "LIGAND_OFF"];
+    const CHAIN_A = 0x800000; 
+    const CHAIN_B = 0xffffff; 
+    const YELLOW  = 0xFFD700; 
+    const LIME    = 0x32CD32; 
+    const RED     = 0xFF0000; 
     
     const RAW_CENTERS = {
        "APO_AA'": [{"label": "Ligand Binding Domain [Protomer 1]", "x": 20.04, "y": 17.38, "z": 40.66}, {"label": "Ligand Binding Domain [Protomer 2]", "x": 48.31, "y": 21.14, "z": 51.93}, {"label": "DNA Binding Domain [Protomer 1]", "x": 40.62, "y": 36.68, "z": 32.35}, {"label": "DNA Binding Domain [Protomer 2]", "x": 24.23, "y": 37.16, "z": 57.24}],
@@ -71,18 +78,14 @@ document.addEventListener("DOMContentLoaded", function() {
        "LIGAND_ON": [{"label": "Ligand Binding Domain [Protomer 1]", "x": 20.33, "y": 16.04, "z": 40.55}, {"label": "Ligand Binding Domain [Protomer 2]", "x": 47.15, "y": 19.66, "z": 48.52}, {"label": "DNA Binding Domain [Protomer 1]", "x": 40.02, "y": 40.10, "z": 32.52}, {"label": "DNA Binding Domain [Protomer 2]", "x": 23.55, "y": 41.44, "z": 48.86}]
     };
 
-    const CHAIN_A = 0x800000; 
-    const CHAIN_B = 0xffffff; 
-    const YELLOW  = 0xFFD700; 
-    const LIME    = 0x32CD32; 
-    const RED     = 0xFF0000; 
-
+    // --- GLOBAL STATE ---
     let state = "LIGAND_OFF";
     const el = (id) => document.getElementById(id);
     let viewer = null;
     let baselineView = null;
 
     try {
+        // Note: We enable standard 3Dmol zoom, but we will intercept the wheel event below.
         viewer = $3Dmol.createViewer('viewer', { backgroundColor: 'black', antialias: false, disableFog: true });
     } catch (e) {
         alert("Could not initialize 3Dmol.js. Check console.");
@@ -126,7 +129,7 @@ document.addEventListener("DOMContentLoaded", function() {
                 PDBS[key] = await response.text();
             } catch (err) {
                 console.error(`Failed to load ${key}:`, err);
-                PDBS[key] = ""; // Fallback empty string
+                PDBS[key] = ""; 
             }
         });
         await Promise.all(promises);
@@ -399,17 +402,24 @@ document.addEventListener("DOMContentLoaded", function() {
     });
     document.addEventListener('mouseup', () => isDragging = false);
 
+    // --- INPUT OVERRIDES ---
+
     const vEl = document.getElementById('viewer');
 
-    // UPDATED: Flipped logic again. 
-    // e.deltaY < 0 (Scroll Up) -> 1.1 (Zoom In)
+    // 1. FORCE CUSTOM SCROLL
+    // 'capture: true' ensures we catch the event before 3Dmol does
     vEl.addEventListener('wheel', e => {
-        e.preventDefault();
-        const factor = (e.deltaY < 0) ? 1.1 : 0.9; 
-        viewer.zoom(factor);
-    }, { passive: false });
+        e.preventDefault(); 
+        e.stopImmediatePropagation(); // Try to stop 3Dmol from seeing it at all
+        
+        // e.deltaY < 0 means "Scrolling Up" / "Wheel Away"
+        // We want this to ZOOM IN (Scale > 1.0)
+        const scaleFactor = (e.deltaY < 0) ? 1.1 : 0.9;
+        
+        viewer.zoom(scaleFactor);
+    }, { passive: false, capture: true });
 
-    // Two-Finger Pan
+    // 2. FORCE TWO-FINGER PAN
     let lastCenter = null;
     vEl.addEventListener('touchstart', e => {
         if (e.touches.length === 2) {
@@ -418,21 +428,32 @@ document.addEventListener("DOMContentLoaded", function() {
                 y: (e.touches[0].clientY + e.touches[1].clientY)/2 
             };
         }
-    }, {passive: false});
+    }, {passive: false, capture: true});
 
     vEl.addEventListener('touchmove', e => {
         if (e.touches.length === 2 && lastCenter) {
             e.preventDefault();
+            e.stopImmediatePropagation();
+            
             const current = { 
                 x: (e.touches[0].clientX + e.touches[1].clientX)/2, 
                 y: (e.touches[0].clientY + e.touches[1].clientY)/2 
             };
+            
+            // Calculate change
             const dx = current.x - lastCenter.x;
             const dy = current.y - lastCenter.y;
-            viewer.translate(dx, -dy);
+
+            // If fingers move UP (negative dy), we want model to move UP.
+            // Camera moves opposite to model. 
+            // To move model UP (+Y), Camera must move DOWN (-Y).
+            // Since dy is negative, we pass 'dy' directly to move camera -Y.
+            
+            viewer.translate(dx, dy);
+            
             lastCenter = current;
         }
-    }, {passive: false});
+    }, {passive: false, capture: true});
 
     // --- Main Execution ---
     (async function startup() {
