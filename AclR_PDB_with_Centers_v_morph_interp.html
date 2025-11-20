@@ -62,7 +62,8 @@ document.addEventListener("DOMContentLoaded", function() {
     };
     
     const PDBS = {}; 
-const MORPH_SEQUENCE = ["APO_AA'", "LIGAND_OFF", "LIGAND_ON", "LIGAND_OFF"];    
+const MORPH_SEQUENCE = ["APO_AA'", "LIGAND_OFF", "LIGAND_ON", "LIGAND_OFF"]; 
+  
     const RAW_CENTERS = {
        "APO_AA'": [{"label": "Ligand Binding Domain [Protomer 1]", "x": 20.04, "y": 17.38, "z": 40.66}, {"label": "Ligand Binding Domain [Protomer 2]", "x": 48.31, "y": 21.14, "z": 51.93}, {"label": "DNA Binding Domain [Protomer 1]", "x": 40.62, "y": 36.68, "z": 32.35}, {"label": "DNA Binding Domain [Protomer 2]", "x": 24.23, "y": 37.16, "z": 57.24}],
        "APO_BC": [{"label": "Ligand Binding Domain [Protomer 1]", "x": 20.15, "y": 17.38, "z": 40.64}, {"label": "Ligand Binding Domain [Protomer 2]", "x": 48.65, "y": 21.46, "z": 51.94}, {"label": "DNA Binding Domain [Protomer 1]", "x": 40.38, "y": 36.73, "z": 32.45}, {"label": "DNA Binding Domain [Protomer 2]", "x": 24.46, "y": 37.31, "z": 57.16}],
@@ -264,7 +265,7 @@ const MORPH_SEQUENCE = ["APO_AA'", "LIGAND_OFF", "LIGAND_ON", "LIGAND_OFF"];
             if (el('showSidechains').checked) try { showSidechains(m); } catch(e){}
             if (currentView) viewer.setView(currentView);
             viewer.render();
-            viewer.animate({ loop: "forward", reps: 0, interval: 40 });
+            viewer.animate({ loop: "forward", reps: 0, interval: 60 });
             status.textContent = "Morphing...";
         }, 50);
     }
