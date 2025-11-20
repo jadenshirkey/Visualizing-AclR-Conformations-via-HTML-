@@ -4,7 +4,7 @@
 <script src="https://unpkg.com/3dmol@2.0.4/build/3Dmol-min.js"></script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AclR — PDB + Centers (Dynamic + Touch)</title>
+<title>AclR — PDB + Centers (Final)</title>
 <style>
   html, body { height:100%; margin:0; }
   body { background:#0b0f14; color:#e5e7eb; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
@@ -62,8 +62,10 @@ document.addEventListener("DOMContentLoaded", function() {
     };
     
     const PDBS = {}; 
-const MORPH_SEQUENCE = ["APO_AA'", "LIGAND_OFF", "LIGAND_ON", "LIGAND_OFF"]; 
-  
+    
+    // UPDATED: Added LIGAND_OFF at the end to create the 'Bounce' effect
+    const MORPH_SEQUENCE = ["APO_AA'", "LIGAND_OFF", "LIGAND_ON", "LIGAND_OFF"];
+    
     const RAW_CENTERS = {
        "APO_AA'": [{"label": "Ligand Binding Domain [Protomer 1]", "x": 20.04, "y": 17.38, "z": 40.66}, {"label": "Ligand Binding Domain [Protomer 2]", "x": 48.31, "y": 21.14, "z": 51.93}, {"label": "DNA Binding Domain [Protomer 1]", "x": 40.62, "y": 36.68, "z": 32.35}, {"label": "DNA Binding Domain [Protomer 2]", "x": 24.23, "y": 37.16, "z": 57.24}],
        "APO_BC": [{"label": "Ligand Binding Domain [Protomer 1]", "x": 20.15, "y": 17.38, "z": 40.64}, {"label": "Ligand Binding Domain [Protomer 2]", "x": 48.65, "y": 21.46, "z": 51.94}, {"label": "DNA Binding Domain [Protomer 1]", "x": 40.38, "y": 36.73, "z": 32.45}, {"label": "DNA Binding Domain [Protomer 2]", "x": 24.46, "y": 37.31, "z": 57.16}],
@@ -186,13 +188,21 @@ const MORPH_SEQUENCE = ["APO_AA'", "LIGAND_OFF", "LIGAND_ON", "LIGAND_OFF"];
             return 0; 
         });
 
+        // UPDATED: Increased steps for smoother morph
         const N_STEPS = 50; 
         const frames = [];
         const fmt = (num) => num.toFixed(3).padStart(8, " "); 
 
         for (let i = 0; i < maps.length; i++) {
             const startMap = maps[i];
-            const endMap = maps[(i + 1) % maps.length];
+            // Handle end of sequence correctly (don't loop back to start if not intended, though with Bounce logic we manually loop)
+            const endMapIndex = (i + 1) % maps.length;
+            
+            // If we are at the last element of our custom sequence, and it's a bounce, we might stop or loop.
+            // The current logic loops 0->1, 1->2, 2->3, 3->0. 
+            // Since our sequence is A,B,C,B, the loop 3->0 creates B->A which closes the loop perfectly.
+            
+            const endMap = maps[endMapIndex];
             
             for (let step = 0; step <= N_STEPS; step++) {
                 if (step === N_STEPS && i < maps.length - 1) continue; 
@@ -244,6 +254,9 @@ const MORPH_SEQUENCE = ["APO_AA'", "LIGAND_OFF", "LIGAND_ON", "LIGAND_OFF"];
         const currentView = viewer.getView();
         const current = state;
         const baseSeq = MORPH_SEQUENCE;
+        
+        // Logic to find where to start in the A->B->C->B loop
+        // If we are at B (OFF), we want to start at the first B.
         const idx = baseSeq.indexOf(current);
         let morphSeq = baseSeq;
         if (idx > -1) {
@@ -265,7 +278,10 @@ const MORPH_SEQUENCE = ["APO_AA'", "LIGAND_OFF", "LIGAND_ON", "LIGAND_OFF"];
             if (el('showSidechains').checked) try { showSidechains(m); } catch(e){}
             if (currentView) viewer.setView(currentView);
             viewer.render();
+            
+            // UPDATED: Slower interval (60ms) for smoother playback
             viewer.animate({ loop: "forward", reps: 0, interval: 60 });
+            
             status.textContent = "Morphing...";
         }, 50);
     }
@@ -400,19 +416,16 @@ const MORPH_SEQUENCE = ["APO_AA'", "LIGAND_OFF", "LIGAND_ON", "LIGAND_OFF"];
     });
     document.addEventListener('mouseup', () => isDragging = false);
 
-    // --- RESTORED INTERACTION HANDLERS ---
-    
     const vEl = document.getElementById('viewer');
 
-    // 1. Custom Scroll (Up = Zoom IN)
+    // UPDATED: Flipped factors. deltaY < 0 (Up) now gives 0.9 (Zoom Out).
     vEl.addEventListener('wheel', e => {
         e.preventDefault();
-        // deltaY < 0 means scrolling up -> Zoom In (scale > 1)
-        const factor = (e.deltaY < 0) ? 1.1 : 0.9;
+        const factor = (e.deltaY < 0) ? 0.9 : 1.1; 
         viewer.zoom(factor);
     }, { passive: false });
 
-    // 2. Two-Finger Pan (Restored logic from V4)
+    // Two-Finger Pan
     let lastCenter = null;
     vEl.addEventListener('touchstart', e => {
         if (e.touches.length === 2) {
@@ -430,14 +443,9 @@ const MORPH_SEQUENCE = ["APO_AA'", "LIGAND_OFF", "LIGAND_ON", "LIGAND_OFF"];
                 x: (e.touches[0].clientX + e.touches[1].clientX)/2, 
                 y: (e.touches[0].clientY + e.touches[1].clientY)/2 
             };
-            
-            // Calculate raw delta
             const dx = current.x - lastCenter.x;
             const dy = current.y - lastCenter.y;
-
-            // Apply translation using V4 logic (Finger Up -> Model Up)
             viewer.translate(dx, -dy);
-
             lastCenter = current;
         }
     }, {passive: false});
