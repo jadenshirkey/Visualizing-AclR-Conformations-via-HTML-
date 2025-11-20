@@ -4,7 +4,7 @@
 <script src="https://unpkg.com/3dmol@2.0.4/build/3Dmol-min.js"></script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AclR — PDB + Centers (Final)</title>
+<title>AclR — PDB + Centers (Final Fixed)</title>
 <style>
   html, body { height:100%; margin:0; }
   body { background:#0b0f14; color:#e5e7eb; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
@@ -62,8 +62,6 @@ document.addEventListener("DOMContentLoaded", function() {
     };
     
     const PDBS = {}; 
-    
-    // UPDATED: Added LIGAND_OFF at the end to create the 'Bounce' effect
     const MORPH_SEQUENCE = ["APO_AA'", "LIGAND_OFF", "LIGAND_ON", "LIGAND_OFF"];
     
     const RAW_CENTERS = {
@@ -84,7 +82,6 @@ document.addEventListener("DOMContentLoaded", function() {
     let viewer = null;
     let baselineView = null;
 
-    // Initialize Viewer
     try {
         viewer = $3Dmol.createViewer('viewer', { backgroundColor: 'black', antialias: false, disableFog: true });
     } catch (e) {
@@ -188,21 +185,13 @@ document.addEventListener("DOMContentLoaded", function() {
             return 0; 
         });
 
-        // UPDATED: Increased steps for smoother morph
         const N_STEPS = 50; 
         const frames = [];
         const fmt = (num) => num.toFixed(3).padStart(8, " "); 
 
         for (let i = 0; i < maps.length; i++) {
             const startMap = maps[i];
-            // Handle end of sequence correctly (don't loop back to start if not intended, though with Bounce logic we manually loop)
-            const endMapIndex = (i + 1) % maps.length;
-            
-            // If we are at the last element of our custom sequence, and it's a bounce, we might stop or loop.
-            // The current logic loops 0->1, 1->2, 2->3, 3->0. 
-            // Since our sequence is A,B,C,B, the loop 3->0 creates B->A which closes the loop perfectly.
-            
-            const endMap = maps[endMapIndex];
+            const endMap = maps[(i + 1) % maps.length];
             
             for (let step = 0; step <= N_STEPS; step++) {
                 if (step === N_STEPS && i < maps.length - 1) continue; 
@@ -254,9 +243,6 @@ document.addEventListener("DOMContentLoaded", function() {
         const currentView = viewer.getView();
         const current = state;
         const baseSeq = MORPH_SEQUENCE;
-        
-        // Logic to find where to start in the A->B->C->B loop
-        // If we are at B (OFF), we want to start at the first B.
         const idx = baseSeq.indexOf(current);
         let morphSeq = baseSeq;
         if (idx > -1) {
@@ -278,10 +264,7 @@ document.addEventListener("DOMContentLoaded", function() {
             if (el('showSidechains').checked) try { showSidechains(m); } catch(e){}
             if (currentView) viewer.setView(currentView);
             viewer.render();
-            
-            // UPDATED: Slower interval (60ms) for smoother playback
             viewer.animate({ loop: "forward", reps: 0, interval: 60 });
-            
             status.textContent = "Morphing...";
         }, 50);
     }
@@ -418,10 +401,11 @@ document.addEventListener("DOMContentLoaded", function() {
 
     const vEl = document.getElementById('viewer');
 
-    // UPDATED: Flipped factors. deltaY < 0 (Up) now gives 0.9 (Zoom Out).
+    // UPDATED: Flipped logic again. 
+    // e.deltaY < 0 (Scroll Up) -> 1.1 (Zoom In)
     vEl.addEventListener('wheel', e => {
         e.preventDefault();
-        const factor = (e.deltaY < 0) ? 0.9 : 1.1; 
+        const factor = (e.deltaY < 0) ? 1.1 : 0.9; 
         viewer.zoom(factor);
     }, { passive: false });
 
